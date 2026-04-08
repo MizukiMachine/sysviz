@@ -132,7 +132,7 @@ export class ClusterRenderer {
         const gridMaterial = new THREE.LineBasicMaterial({
             color: GRID_COLOR,
             transparent: true,
-            opacity: 0.35
+            opacity: 0.25
         });
 
         const halfSize = GRID_SIZE / 2;

@@ -31,6 +31,19 @@
 </head>
 <body class="font-sans bg-stone-50">
   <canvas id="cluster-canvas" aria-label="3D cluster canvas"></canvas>
+  <header class="system-header" aria-label="System selector">
+    <label class="system-header-label" for="system-selector">System</label>
+    <div class="system-selector-wrap">
+      <select id="system-selector" class="system-selector" aria-label="Select system flow">
+        <option value="flask-request-flow">Flask: 1 Request Flow</option>
+      </select>
+      <span class="system-selector-icon" aria-hidden="true">
+        <svg viewBox="0 0 20 20">
+          <path d="M5.25 7.5 10 12.25 14.75 7.5" />
+        </svg>
+      </span>
+    </div>
+  </header>
   <div class="playback-bar" aria-label="Playback controls">
     <button id="play-button" class="playback-button" type="button" aria-label="Play">
       <svg viewBox="0 0 24 24" aria-hidden="true">
