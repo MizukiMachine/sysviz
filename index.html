@@ -34,9 +34,26 @@
 
   <script type="module">
     import { ClusterRenderer } from './js/rendering/ClusterRenderer.js';
+    import {
+      FLASK_NODES,
+      FLASK_CONNECTIONS,
+      buildTrafficRoutes
+    } from './js/data/FlaskFlow.js';
 
     const canvas = document.getElementById('cluster-canvas');
     const renderer = new ClusterRenderer(canvas);
+
+    for (const node of FLASK_NODES) {
+      renderer.addResource(node);
+    }
+
+    for (const connection of FLASK_CONNECTIONS) {
+      renderer.addConnection(connection);
+    }
+
+    for (const route of buildTrafficRoutes(renderer.resourceMeshes)) {
+      renderer.addTrafficRoute(route);
+    }
 
     renderer.start();
     window.clusterRenderer = renderer;

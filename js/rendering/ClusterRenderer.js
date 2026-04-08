@@ -527,10 +527,7 @@ export class ClusterRenderer {
 
     _animateResources(delta) {
         const time = performance.now() * 0.001;
-        for (const [id, group] of this.resourceMeshes) {
-            if (group.userData.resourceType === 'Pod') {
-                group.position.y = (group.userData.baseY || 0) + Math.sin(time * 2 + id.charCodeAt(0)) * 0.08;
-            }
+        for (const group of this.resourceMeshes.values()) {
             if (group.userData.animate) {
                 group.userData.animate(time, delta);
             }
