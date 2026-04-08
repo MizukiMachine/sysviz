@@ -25,6 +25,7 @@ export class ClusterRenderer {
         this.lastFrameTime = 0;
         this.onSelect = null;
         this.onHover = null;
+        this.onAnimate = null;
         this.onResourceMoved = null;
         this._draggingResource = null;
         this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -458,6 +459,12 @@ export class ClusterRenderer {
         }
     }
 
+    setResourceStatus(resourceId, status) {
+        const group = this.resourceMeshes.get(resourceId);
+        if (!group) return;
+        this.meshFactory.updateStatus(group, status);
+    }
+
     _rebuildPickableList() {
         this.pickableObjects = [];
         for (const group of this.resourceMeshes.values()) {
@@ -489,6 +496,18 @@ export class ClusterRenderer {
         this.particleTraffic.removeRoute(routeId);
     }
 
+    setTrafficRouteActive(routeId, active) {
+        this.particleTraffic.setRouteActive(routeId, active);
+    }
+
+    setConnectionActive(connectionId, active) {
+        this.connectionLines.setConnectionActive(connectionId, active);
+    }
+
+    clearTrafficParticles() {
+        this.particleTraffic.clearParticles();
+    }
+
     start() {
         if (this.running) return;
         this.running = true;
@@ -511,6 +530,10 @@ export class ClusterRenderer {
         const now = performance.now();
         const delta = (now - this.lastFrameTime) / 1000;
         this.lastFrameTime = now;
+
+        if (this.onAnimate) {
+            this.onAnimate(delta);
+        }
 
         this.controls.update();
 
