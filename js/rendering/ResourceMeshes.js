@@ -31,7 +31,7 @@ function createStandardMaterial(color, status) {
         metalness: 0.4,
         roughness: 0.35,
         emissive: new THREE.Color(statusColor),
-        emissiveIntensity: 0.25
+        emissiveIntensity: 0.1
     });
 }
 
@@ -40,7 +40,7 @@ function createGlowRing(color, radius) {
     const ringMat = new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.15,
+        opacity: 0.08,
         side: THREE.DoubleSide,
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
@@ -76,12 +76,12 @@ function createLabelSprite(text) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-    ctx.shadowBlur = 8;
+    ctx.shadowColor = 'rgba(255, 255, 255, 0)';
+    ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 2;
+    ctx.shadowOffsetY = 0;
 
-    ctx.fillStyle = 'rgba(13, 17, 23, 0.85)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
     const metrics = ctx.measureText(text);
     const textWidth = Math.min(metrics.width + 28, 500);
     const rh = 56;
@@ -101,12 +101,11 @@ function createLabelSprite(text) {
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = 'rgba(50, 108, 229, 0.4)';
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.14)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#e6edf3';
+    ctx.fillStyle = '#111827';
     ctx.fillText(text, 256, 64, 480);
 
     const texture = new THREE.CanvasTexture(canvas);
