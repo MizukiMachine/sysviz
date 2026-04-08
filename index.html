@@ -116,7 +116,9 @@
     });
 
     renderer.onAnimate = (delta) => {
-      playback.update(delta);
+      if (playback.state === 'playing') {
+        playback.update(delta);
+      }
     };
 
     playButton.addEventListener('click', () => playback.play());

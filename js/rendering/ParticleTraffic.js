@@ -364,6 +364,9 @@ export class ParticleTrafficSystem {
                 this._deactivateParticle(particle);
             }
         }
+        for (const routeId of this.spawnTimers.keys()) {
+            this.spawnTimers.set(routeId, 0);
+        }
         this._flushBuffers();
     }
 
