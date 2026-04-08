@@ -207,7 +207,7 @@ export class ParticleTrafficSystem {
         const sprite = this.labelSprites[index];
         if (!sprite) return;
 
-        if (!particle.active || !route?.payload) {
+        if (!particle.active || !route?.payload || particle.trailIndex > 0) {
             sprite.visible = false;
             sprite.material.opacity = 0;
             return;
