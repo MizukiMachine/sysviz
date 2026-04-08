@@ -358,6 +358,15 @@ export class ParticleTrafficSystem {
         return this.routes.size;
     }
 
+    clearParticles() {
+        for (const particle of this.particles) {
+            if (particle.active) {
+                this._deactivateParticle(particle);
+            }
+        }
+        this._flushBuffers();
+    }
+
     dispose() {
         for (const particle of this.particles) {
             particle.reset();

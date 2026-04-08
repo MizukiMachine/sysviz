@@ -24,6 +24,11 @@ export class ConnectionLineManager {
         this.scene.add(this.lineGroup);
     }
 
+    _getBaseOpacity(connection) {
+        const trafficVolume = connection.trafficVolume || 1;
+        return Math.min(MIN_OPACITY + trafficVolume * 0.05, MAX_OPACITY);
+    }
+
     addConnection(connection, resourceMeshes) {
         if (this.connections.has(connection.id)) return;
 
@@ -43,8 +48,7 @@ export class ConnectionLineManager {
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
         const relationColor = RELATIONSHIP_COLORS[connection.type] || RELATIONSHIP_COLORS.default;
-        const trafficVolume = connection.trafficVolume || 1;
-        const opacity = Math.min(MIN_OPACITY + trafficVolume * 0.05, MAX_OPACITY);
+        const opacity = this._getBaseOpacity(connection);
 
         const material = new THREE.LineDashedMaterial({
             color: relationColor,
@@ -134,6 +138,14 @@ export class ConnectionLineManager {
         }
     }
 
+    setConnectionActive(connectionId, active) {
+        const entry = this.connections.get(connectionId);
+        if (!entry) return;
+
+        entry.line.material.opacity = active ? MAX_OPACITY : this._getBaseOpacity(entry.connection) * 0.35;
+        entry.line.userData.flowSpeed = FLOW_SPEED * (active ? 2.4 : 0.45);
+    }
+
     sync(connectionsMap, resourceMeshes) {
         const newIds = new Set();
 
@@ -175,8 +187,7 @@ export class ConnectionLineManager {
 
     resetHighlight() {
         for (const entry of this.connections.values()) {
-            const trafficVolume = entry.connection.trafficVolume || 1;
-            entry.line.material.opacity = Math.min(MIN_OPACITY + trafficVolume * 0.05, MAX_OPACITY);
+            entry.line.material.opacity = this._getBaseOpacity(entry.connection);
             entry.line.userData.flowSpeed = FLOW_SPEED * (0.5 + Math.random() * 0.5);
         }
     }

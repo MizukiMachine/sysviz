@@ -31,8 +31,26 @@
 </head>
 <body class="font-sans bg-stone-50">
   <canvas id="cluster-canvas" aria-label="3D cluster canvas"></canvas>
+  <div class="playback-bar" aria-label="Playback controls">
+    <button id="play-button" class="playback-button" type="button" aria-label="Play">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 6.82v10.36c0 .79.87 1.27 1.54.85l8.14-5.18a1 1 0 0 0 0-1.69L9.54 5.97A1 1 0 0 0 8 6.82Z" />
+      </svg>
+    </button>
+    <button id="pause-button" class="playback-button" type="button" aria-label="Pause">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 5.5A1.5 1.5 0 0 1 9.5 7v10A1.5 1.5 0 0 1 8 18.5 1.5 1.5 0 0 1 6.5 17V7A1.5 1.5 0 0 1 8 5.5Zm8 0A1.5 1.5 0 0 1 17.5 7v10A1.5 1.5 0 0 1 16 18.5 1.5 1.5 0 0 1 14.5 17V7A1.5 1.5 0 0 1 16 5.5Z" />
+      </svg>
+    </button>
+    <button id="stop-button" class="playback-button playback-button-stop" type="button" aria-label="Stop">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 7.25A1.75 1.75 0 0 0 6.25 9v6A1.75 1.75 0 0 0 8 16.75h8A1.75 1.75 0 0 0 17.75 15V9A1.75 1.75 0 0 0 16 7.25H8Z" />
+      </svg>
+    </button>
+  </div>
 
   <script type="module">
+    import { PlaybackEngine } from './js/engine/PlaybackEngine.js';
     import { ClusterRenderer } from './js/rendering/ClusterRenderer.js';
     import {
       FLASK_NODES,
@@ -41,7 +59,11 @@
     } from './js/data/FlaskFlow.js';
 
     const canvas = document.getElementById('cluster-canvas');
+    const playButton = document.getElementById('play-button');
+    const pauseButton = document.getElementById('pause-button');
+    const stopButton = document.getElementById('stop-button');
     const renderer = new ClusterRenderer(canvas);
+    const resourceIds = FLASK_NODES.map((node) => node.id);
 
     for (const node of FLASK_NODES) {
       renderer.addResource(node);
@@ -55,8 +77,58 @@
       renderer.addTrafficRoute(route);
     }
 
+    function setRouteActive(routeId, active) {
+      renderer.setTrafficRouteActive(routeId, active);
+      renderer.setConnectionActive(routeId.replace(/^route-/, ''), active);
+    }
+
+    function resetPlaybackScene() {
+      for (const resourceId of resourceIds) {
+        renderer.setResourceStatus(resourceId, 'idle');
+      }
+
+      for (const connection of FLASK_CONNECTIONS) {
+        setRouteActive(`route-${connection.id}`, false);
+      }
+
+      renderer.clearTrafficParticles();
+    }
+
+    function syncPlaybackControls(engine) {
+      playButton.disabled = engine.state === 'playing';
+      pauseButton.disabled = engine.state !== 'playing';
+      stopButton.disabled = engine.state === 'idle' && engine.elapsed === 0;
+    }
+
+    const playback = new PlaybackEngine({
+      onResourceState(resourceId, status) {
+        renderer.setResourceStatus(resourceId, status);
+      },
+      onRouteState(routeId, active) {
+        setRouteActive(routeId, active);
+      },
+      onReset() {
+        resetPlaybackScene();
+      },
+      onStateChange(_state) {
+        syncPlaybackControls(playback);
+      }
+    });
+
+    renderer.onAnimate = (delta) => {
+      playback.update(delta);
+    };
+
+    playButton.addEventListener('click', () => playback.play());
+    pauseButton.addEventListener('click', () => playback.pause());
+    stopButton.addEventListener('click', () => playback.stop());
+
+    resetPlaybackScene();
+    syncPlaybackControls(playback);
     renderer.start();
+
     window.clusterRenderer = renderer;
+    window.playbackEngine = playback;
   </script>
 </body>
 </html>
