@@ -13,7 +13,7 @@ const TRAFFIC_COLORS = {
     healthy: new THREE.Color(0x3fb950),
     error:   new THREE.Color(0xf85149),
     slow:    new THREE.Color(0xd29922),
-    default: new THREE.Color(0x58a6ff)
+    default: new THREE.Color(0x60a5fa)
 };
 
 const vertexShader = `
@@ -117,7 +117,7 @@ export class ParticleTrafficSystem {
             fragmentShader,
             transparent: true,
             depthWrite: false,
-            blending: THREE.AdditiveBlending
+            blending: THREE.NormalBlending
         });
     }
 

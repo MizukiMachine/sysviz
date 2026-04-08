@@ -2,10 +2,10 @@ import * as THREE from 'three';
 
 const RELATIONSHIP_COLORS = {
     ownership: 0xc9d1d9,
-    network:   0x58a6ff,
+    network:   0x93c5fd,
     storage:   0x8b949e,
     config:    0xd29922,
-    default:   0x6e7681
+    default:   0xd1d5db
 };
 
 const DASH_SIZE = 0.3;

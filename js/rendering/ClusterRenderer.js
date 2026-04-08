@@ -4,31 +4,22 @@ import { ResourceMeshFactory } from './ResourceMeshes.js';
 import { ConnectionLineManager } from './ConnectionLines.js';
 import { ParticleTrafficSystem } from './ParticleTraffic.js';
 
-const BACKGROUND_COLOR = 0x0d1117;
-const K8S_BLUE = 0x326CE5;
+const BACKGROUND_COLOR = 0xfafafa;
+const GRID_COLOR = 0xd1d5db;
 const GRID_SIZE = 40;
 const GRID_DIVISIONS = 20;
-const HIGHLIGHT_COLOR = 0x58a6ff;
-const SELECT_COLOR = 0xffa657;
-const NAMESPACE_OPACITY = 0.04;
-
-const NAMESPACE_COLORS = [
-    0x326CE5, 0x28a745, 0xe36209, 0x8957e5,
-    0xd73a49, 0x0366d6, 0x6f42c1, 0x22863a,
-    0xb08800, 0xdb6d28, 0x5a32a3, 0x044289
-];
+const HIGHLIGHT_COLOR = 0xbfdbfe;
+const SELECT_COLOR = 0xfbcfe8;
 
 export class ClusterRenderer {
     constructor(canvas) {
         this.canvas = canvas;
         this.resourceMeshes = new Map();
-        this.namespacePlanes = new Map();
         this.selectedResource = null;
         this.hoveredResource = null;
         this.mouse = new THREE.Vector2(-999, -999);
         this._clickStart = new THREE.Vector2();
         this._didDrag = false;
-        this.namespaceColorIndex = 0;
         this.running = false;
         this.frameId = null;
         this.lastFrameTime = 0;
@@ -52,7 +43,7 @@ export class ClusterRenderer {
     _initScene() {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(BACKGROUND_COLOR);
-        this.scene.fog = new THREE.FogExp2(BACKGROUND_COLOR, 0.006);
+        this.scene.fog = new THREE.FogExp2(0xffffff, 0.012);
     }
 
     _initCamera() {
@@ -105,11 +96,8 @@ export class ClusterRenderer {
     }
 
     _initLights() {
-        this.ambientLight = new THREE.AmbientLight(0x8899bb, 0.7);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
         this.scene.add(this.ambientLight);
-
-        const hemiLight = new THREE.HemisphereLight(0x88aaff, 0x222244, 0.4);
-        this.scene.add(hemiLight);
 
         this.directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
         this.directionalLight.position.set(20, 40, 20);
@@ -124,21 +112,21 @@ export class ClusterRenderer {
         this.directionalLight.shadow.bias = -0.001;
         this.scene.add(this.directionalLight);
 
-        const rimLight = new THREE.DirectionalLight(0x326CE5, 0.4);
-        rimLight.position.set(-15, 10, -15);
-        this.scene.add(rimLight);
-
-        const fillLight = new THREE.DirectionalLight(0x446688, 0.3);
-        fillLight.position.set(-10, 5, 20);
+        const fillLight = new THREE.DirectionalLight(0xffedd5, 0.45);
+        fillLight.position.set(-16, 12, 18);
         this.scene.add(fillLight);
+
+        const rimLight = new THREE.DirectionalLight(0xf8fafc, 0.25);
+        rimLight.position.set(-14, 10, -12);
+        this.scene.add(rimLight);
     }
 
     _initGrid() {
         this.gridGroup = new THREE.Group();
         const gridMaterial = new THREE.LineBasicMaterial({
-            color: K8S_BLUE,
+            color: GRID_COLOR,
             transparent: true,
-            opacity: 0.1
+            opacity: 0.35
         });
 
         const halfSize = GRID_SIZE / 2;
@@ -156,9 +144,9 @@ export class ClusterRenderer {
         this.gridGroup.add(gridLines);
 
         const axesMaterial = new THREE.LineBasicMaterial({
-            color: K8S_BLUE,
+            color: GRID_COLOR,
             transparent: true,
-            opacity: 0.25
+            opacity: 0.55
         });
         const axesGeometry = new THREE.BufferGeometry();
         axesGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
@@ -170,11 +158,11 @@ export class ClusterRenderer {
 
         const groundGeometry = new THREE.PlaneGeometry(GRID_SIZE * 1.5, GRID_SIZE * 1.5);
         const groundMaterial = new THREE.MeshStandardMaterial({
-            color: 0x0a0e14,
-            metalness: 0.9,
-            roughness: 0.2,
+            color: 0xffffff,
+            metalness: 0.05,
+            roughness: 0.95,
             transparent: true,
-            opacity: 0.15,
+            opacity: 0.8,
         });
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
@@ -204,24 +192,6 @@ export class ClusterRenderer {
         this._onContextMenu = (e) => {
             e.preventDefault();
             e.stopPropagation();
-            const rect = this.canvas.getBoundingClientRect();
-            this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-            this.raycaster.setFromCamera(this.mouse, this.camera);
-            const intersects = this.raycaster.intersectObjects(this.pickableObjects, true);
-            if (intersects.length > 0) {
-                let target = intersects[0].object;
-                while (target.parent && !target.userData.resourceId) {
-                    target = target.parent;
-                }
-                if (target.userData.resourceId && window.game?.engine) {
-                    window.game.engine.emit('resource:contextmenu', {
-                        uid: target.userData.resourceId,
-                        x: e.clientX,
-                        y: e.clientY,
-                    });
-                }
-            }
         };
 
         this.canvas.addEventListener('mousemove', this._onMouseMove);
@@ -386,7 +356,7 @@ export class ClusterRenderer {
             switch (effect) {
                 case 'selected':
                     if (hasEmissive) {
-                        mat.emissiveIntensity = 0.5;
+                        mat.emissiveIntensity = 0.3;
                         mat.emissive.set(SELECT_COLOR);
                     } else if (mat.color) {
                         if (!child.userData.baseColor) child.userData.baseColor = mat.color.getHex();
@@ -398,7 +368,7 @@ export class ClusterRenderer {
                     break;
                 case 'hovered':
                     if (hasEmissive) {
-                        mat.emissiveIntensity = 0.3;
+                        mat.emissiveIntensity = 0.18;
                         mat.emissive.set(HIGHLIGHT_COLOR);
                     } else if (mat.color) {
                         if (!child.userData.baseColor) child.userData.baseColor = mat.color.getHex();
@@ -409,9 +379,9 @@ export class ClusterRenderer {
                     if (hasEmissive) {
                         if (child.userData.baseEmissive) {
                             mat.emissive.copy(child.userData.baseEmissive);
-                            mat.emissiveIntensity = child.userData.baseEmissiveIntensity || 0.15;
+                            mat.emissiveIntensity = child.userData.baseEmissiveIntensity || 0.1;
                         } else {
-                            mat.emissiveIntensity = 0.15;
+                            mat.emissiveIntensity = 0.1;
                         }
                     } else if (child.userData.baseColor !== undefined) {
                         mat.color.set(child.userData.baseColor);
@@ -450,10 +420,6 @@ export class ClusterRenderer {
         this.scene.add(group);
         this.resourceMeshes.set(resource.id, group);
         this._rebuildPickableList();
-
-        if (resource.namespace) {
-            this._ensureNamespacePlane(resource.namespace);
-        }
     }
 
     removeResource(resourceId) {
@@ -503,43 +469,6 @@ export class ClusterRenderer {
         }
     }
 
-    _ensureNamespacePlane(namespace) {
-        if (this.namespacePlanes.has(namespace)) return;
-
-        const colorIdx = this.namespaceColorIndex++ % NAMESPACE_COLORS.length;
-        const color = NAMESPACE_COLORS[colorIdx];
-        const planeGeom = new THREE.PlaneGeometry(6, 6);
-        const planeMat = new THREE.MeshStandardMaterial({
-            color,
-            transparent: true,
-            opacity: NAMESPACE_OPACITY,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        const plane = new THREE.Mesh(planeGeom, planeMat);
-        plane.rotation.x = -Math.PI / 2;
-        plane.position.y = -0.05;
-        plane.receiveShadow = true;
-        plane.userData.isNamespacePlane = true;
-
-        this.scene.add(plane);
-        this.namespacePlanes.set(namespace, { mesh: plane, color });
-    }
-
-    updateNamespaceBounds(namespace, bounds) {
-        const entry = this.namespacePlanes.get(namespace);
-        if (!entry) return;
-
-        const width = bounds.maxX - bounds.minX + 4;
-        const depth = bounds.maxZ - bounds.minZ + 4;
-        const centerX = (bounds.minX + bounds.maxX) / 2;
-        const centerZ = (bounds.minZ + bounds.maxZ) / 2;
-
-        entry.mesh.geometry.dispose();
-        entry.mesh.geometry = new THREE.PlaneGeometry(width, depth);
-        entry.mesh.position.set(centerX, -0.05, centerZ);
-    }
-
     addConnection(connection) {
         this.connectionLines.addConnection(connection, this.resourceMeshes);
     }
@@ -558,38 +487,6 @@ export class ClusterRenderer {
 
     removeTrafficRoute(routeId) {
         this.particleTraffic.removeRoute(routeId);
-    }
-
-    syncWithState(clusterState) {
-        if (!clusterState) return;
-
-        const currentIds = new Set(this.resourceMeshes.keys());
-        const stateIds = new Set();
-
-        if (clusterState.resources) {
-            for (const resource of clusterState.resources.values()) {
-                stateIds.add(resource.id);
-                if (currentIds.has(resource.id)) {
-                    this.updateResource(resource);
-                } else {
-                    this.addResource(resource);
-                }
-            }
-        }
-
-        for (const id of currentIds) {
-            if (!stateIds.has(id)) {
-                this.removeResource(id);
-            }
-        }
-
-        if (clusterState.connections) {
-            this.connectionLines.sync(clusterState.connections, this.resourceMeshes);
-        }
-
-        if (clusterState.trafficRoutes) {
-            this.particleTraffic.syncRoutes(clusterState.trafficRoutes);
-        }
     }
 
     start() {
@@ -738,13 +635,6 @@ export class ClusterRenderer {
         for (const id of [...this.resourceMeshes.keys()]) {
             this.removeResource(id);
         }
-
-        for (const entry of this.namespacePlanes.values()) {
-            this.scene.remove(entry.mesh);
-            entry.mesh.geometry.dispose();
-            entry.mesh.material.dispose();
-        }
-        this.namespacePlanes.clear();
 
         this.connectionLines.dispose();
         this.particleTraffic.dispose();
