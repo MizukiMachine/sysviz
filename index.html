@@ -103,12 +103,19 @@
     const playback = new PlaybackEngine({
       onResourceState(resourceId, status) {
         renderer.setResourceStatus(resourceId, status);
+        if (status === 'active') {
+          const resourceMesh = renderer.resourceMeshes.get(resourceId);
+          if (resourceMesh) {
+            renderer.setCameraTarget(resourceMesh.position, 800);
+          }
+        }
       },
       onRouteState(routeId, active) {
         setRouteActive(routeId, active);
       },
       onReset() {
         resetPlaybackScene();
+        renderer.resetCamera();
       },
       onStateChange(_state) {
         syncPlaybackControls(playback);

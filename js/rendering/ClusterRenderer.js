@@ -23,6 +23,9 @@ export class ClusterRenderer {
         this.running = false;
         this.frameId = null;
         this.lastFrameTime = 0;
+        this._initialCameraPosition = new THREE.Vector3();
+        this._initialCameraTarget = new THREE.Vector3();
+        this._cameraTargetAnimation = null;
         this.onSelect = null;
         this.onHover = null;
         this.onAnimate = null;
@@ -52,6 +55,7 @@ export class ClusterRenderer {
         this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
         this.camera.position.set(18, 14, 18);
         this.camera.lookAt(0, 0, 0);
+        this._initialCameraPosition.copy(this.camera.position);
     }
 
     _initRenderer() {
@@ -93,6 +97,7 @@ export class ClusterRenderer {
             ONE: THREE.TOUCH.ROTATE,
             TWO: THREE.TOUCH.DOLLY_PAN,
         };
+        this._initialCameraTarget.copy(this.controls.target);
         this.controls.update();
     }
 
@@ -535,6 +540,7 @@ export class ClusterRenderer {
             this.onAnimate(delta);
         }
 
+        this._updateCameraTargetAnimation(now);
         this.controls.update();
 
         if (!this._didDrag) {
@@ -546,6 +552,24 @@ export class ClusterRenderer {
         this._animateResources(delta);
 
         this.renderer.render(this.scene, this.camera);
+    }
+
+    _updateCameraTargetAnimation(now) {
+        if (!this._cameraTargetAnimation) return;
+
+        const animation = this._cameraTargetAnimation;
+        const duration = Math.max(animation.duration, 1);
+        const t = Math.min((now - animation.startTime) / duration, 1);
+        const ease = t < 0.5
+            ? 4 * t * t * t
+            : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        this.controls.target.lerpVectors(animation.start, animation.end, ease);
+
+        if (t >= 1) {
+            this.controls.target.copy(animation.end);
+            this._cameraTargetAnimation = null;
+        }
     }
 
     _animateResources(delta) {
@@ -563,6 +587,18 @@ export class ClusterRenderer {
 
         this.controls.target.copy(group.position);
         this.controls.update();
+    }
+
+    setCameraTarget(position, duration = 800) {
+        if (!position) return;
+
+        const target = position.clone ? position.clone() : new THREE.Vector3(position.x, position.y, position.z);
+        this._cameraTargetAnimation = {
+            start: this.controls.target.clone(),
+            end: target,
+            startTime: performance.now(),
+            duration
+        };
     }
 
     getScreenPosition(resourceId) {
@@ -636,8 +672,9 @@ export class ClusterRenderer {
     }
 
     resetCamera() {
-        this.camera.position.set(18, 14, 18);
-        this.controls.target.set(0, 0, 0);
+        this._cameraTargetAnimation = null;
+        this.camera.position.copy(this._initialCameraPosition);
+        this.controls.target.copy(this._initialCameraTarget);
         this.controls.update();
     }
 
