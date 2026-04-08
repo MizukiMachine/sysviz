@@ -127,11 +127,12 @@ function createGlowRing(color, radius = 1.05) {
 function createDefaultResource(resource) {
     const group = new THREE.Group();
     const statusColor = getStatusColor(resource.status);
+    const nodeColor = resource.color || BASE_COLOR;
 
     const geometry = roundedBoxGeometry(2.8, 1.3, 0.6, 0.18);
     geometry.center();
     const material = new THREE.MeshStandardMaterial({
-        color: BASE_COLOR,
+        color: nodeColor,
         metalness: 0.15,
         roughness: 0.42,
         emissive: new THREE.Color(statusColor),
@@ -183,7 +184,6 @@ function createDefaultResource(resource) {
     const idleY = resource.y || 0;
     group.userData.baseY = idleY;
     group.userData.animate = resource.animate || ((time) => {
-        group.position.y = idleY + Math.sin(time * 1.5 + (resource.floatOffset || 0)) * 0.05;
         glowRing.material.opacity = 0.12 + (Math.sin(time * 2.4 + (resource.glowOffset || 0)) + 1) * 0.04;
     });
 
