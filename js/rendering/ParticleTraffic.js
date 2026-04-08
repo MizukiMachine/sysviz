@@ -8,6 +8,7 @@ const SPAWN_INTERVAL = 0.05;
 const TRAIL_LENGTH = 3;
 const FADE_IN_DURATION = 0.15;
 const FADE_OUT_START = 0.85;
+const PARTICLE_LABEL_SCALE = { x: 1.7, y: 0.38, z: 1 };
 
 const TRAFFIC_COLORS = {
     healthy: new THREE.Color(0x3fb950),
@@ -60,6 +61,7 @@ class Particle {
         this.alpha = 0;
         this.size = PARTICLE_BASE_SIZE;
         this.trailIndex = 0;
+        this.payload = '';
     }
 
     reset() {
@@ -69,6 +71,7 @@ class Particle {
         this.speed = 0;
         this.alpha = 0;
         this.trailIndex = 0;
+        this.payload = '';
     }
 }
 
@@ -86,6 +89,7 @@ export class ParticleTrafficSystem {
         this._initGeometry();
         this._initMaterial();
         this._initPoints();
+        this._initLabels();
 
         this.spawnTimers = new Map();
     }
@@ -127,6 +131,103 @@ export class ParticleTrafficSystem {
         this.scene.add(this.pointCloud);
     }
 
+    _initLabels() {
+        this.labelTextures = new Map();
+        this.labelSprites = new Array(POOL_SIZE);
+
+        for (let i = 0; i < POOL_SIZE; i++) {
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+                transparent: true,
+                depthTest: false,
+                sizeAttenuation: true,
+                opacity: 0
+            }));
+            sprite.visible = false;
+            sprite.renderOrder = 12;
+            sprite.scale.set(
+                PARTICLE_LABEL_SCALE.x,
+                PARTICLE_LABEL_SCALE.y,
+                PARTICLE_LABEL_SCALE.z
+            );
+            this.labelSprites[i] = sprite;
+            this.scene.add(sprite);
+        }
+    }
+
+    _getLabelTexture(text) {
+        const label = text || '';
+        if (this.labelTextures.has(label)) {
+            return this.labelTextures.get(label);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 768;
+        canvas.height = 112;
+        const ctx = canvas.getContext('2d');
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.font = '600 24px "Inter", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const textWidth = Math.min(ctx.measureText(label).width + 34, canvas.width - 12);
+        const boxHeight = 56;
+        const boxX = (canvas.width - textWidth) / 2;
+        const boxY = (canvas.height - boxHeight) / 2;
+        const radius = 14;
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+        ctx.beginPath();
+        ctx.moveTo(boxX + radius, boxY);
+        ctx.lineTo(boxX + textWidth - radius, boxY);
+        ctx.quadraticCurveTo(boxX + textWidth, boxY, boxX + textWidth, boxY + radius);
+        ctx.lineTo(boxX + textWidth, boxY + boxHeight - radius);
+        ctx.quadraticCurveTo(boxX + textWidth, boxY + boxHeight, boxX + textWidth - radius, boxY + boxHeight);
+        ctx.lineTo(boxX + radius, boxY + boxHeight);
+        ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
+        ctx.lineTo(boxX, boxY + radius);
+        ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 48);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.minFilter = THREE.LinearFilter;
+        this.labelTextures.set(label, texture);
+        return texture;
+    }
+
+    _setParticleLabel(index, particle, route) {
+        const sprite = this.labelSprites[index];
+        if (!sprite) return;
+
+        if (!particle.active || !route?.payload || particle.trailIndex > 0) {
+            sprite.visible = false;
+            sprite.material.opacity = 0;
+            return;
+        }
+
+        if (sprite.userData.payload !== route.payload) {
+            sprite.material.map = this._getLabelTexture(route.payload);
+            sprite.material.needsUpdate = true;
+            sprite.userData.payload = route.payload;
+        }
+
+        sprite.position.set(
+            this.positions[index * 3],
+            this.positions[index * 3 + 1] + 0.34 + particle.trailIndex * 0.02,
+            this.positions[index * 3 + 2]
+        );
+        sprite.material.opacity = particle.alpha * Math.max(0.35, 0.95 - particle.trailIndex * 0.2);
+        sprite.visible = sprite.material.opacity > 0.01;
+    }
+
     addRoute(route) {
         if (this.routes.has(route.id)) return;
 
@@ -138,6 +239,7 @@ export class ParticleTrafficSystem {
             curve,
             sourceId: route.sourceId,
             targetId: route.targetId,
+            payload: route.payload || '',
             trafficType: route.trafficType || 'default',
             requestRate: route.requestRate || 1,
             color: TRAFFIC_COLORS[route.trafficType] || TRAFFIC_COLORS.default,
@@ -163,6 +265,7 @@ export class ParticleTrafficSystem {
         if (!route) return;
 
         if (updates.requestRate !== undefined) route.requestRate = updates.requestRate;
+        if (updates.payload !== undefined) route.payload = updates.payload;
         if (updates.trafficType !== undefined) {
             route.trafficType = updates.trafficType;
             route.color = TRAFFIC_COLORS[updates.trafficType] || TRAFFIC_COLORS.default;
@@ -209,6 +312,13 @@ export class ParticleTrafficSystem {
         const idx = this.particles.indexOf(particle);
         if (idx === -1) return;
 
+        const sprite = this.labelSprites[idx];
+        if (sprite) {
+            sprite.visible = false;
+            sprite.material.opacity = 0;
+            sprite.userData.payload = null;
+        }
+
         particle.reset();
         this.positions[idx * 3 + 1] = -1000;
         this.sizes[idx] = 0;
@@ -229,6 +339,7 @@ export class ParticleTrafficSystem {
         particle.alpha = 0;
         particle.size = PARTICLE_BASE_SIZE * (0.7 + Math.random() * 0.6);
         particle.trailIndex = 0;
+        particle.payload = route.payload;
 
         this.colors[index * 3] = route.color.r;
         this.colors[index * 3 + 1] = route.color.g;
@@ -267,6 +378,7 @@ export class ParticleTrafficSystem {
                     trail.alpha = 0;
                     trail.size = PARTICLE_BASE_SIZE * (0.5 - t * 0.12);
                     trail.trailIndex = t + 1;
+                    trail.payload = route.payload;
 
                     this.colors[trailIdx * 3] = route.color.r * (1 - t * 0.2);
                     this.colors[trailIdx * 3 + 1] = route.color.g * (1 - t * 0.2);
@@ -316,6 +428,7 @@ export class ParticleTrafficSystem {
 
             this.alphas[i] = particle.alpha;
             this.sizes[i] = particle.size * (particle.alpha * 0.5 + 0.5);
+            this._setParticleLabel(i, particle, route);
         }
     }
 
@@ -367,6 +480,10 @@ export class ParticleTrafficSystem {
         for (const routeId of this.spawnTimers.keys()) {
             this.spawnTimers.set(routeId, 0);
         }
+        for (const sprite of this.labelSprites) {
+            sprite.visible = false;
+            sprite.material.opacity = 0;
+        }
         this._flushBuffers();
     }
 
@@ -379,6 +496,13 @@ export class ParticleTrafficSystem {
         this.activeCount = 0;
 
         this.scene.remove(this.pointCloud);
+        for (const sprite of this.labelSprites) {
+            this.scene.remove(sprite);
+            sprite.material.dispose();
+        }
+        for (const texture of this.labelTextures.values()) {
+            texture.dispose();
+        }
         this.geometry.dispose();
         this.material.dispose();
     }

@@ -8,7 +8,7 @@ export const FLASK_NODES = [
         shape: 'default',
         status: 'idle',
         color: 0x6C9BD2,
-        x: -12,
+        x: -10,
         y: 0,
         z: 3,
         dataIn: 'User action',
@@ -23,7 +23,7 @@ export const FLASK_NODES = [
         shape: 'default',
         status: 'idle',
         color: 0x7BC67E,
-        x: -7,
+        x: -5,
         y: 0,
         z: 0,
         dataIn: 'HTTP request',
@@ -38,7 +38,7 @@ export const FLASK_NODES = [
         shape: 'default',
         status: 'idle',
         color: 0xD4A76A,
-        x: -2,
+        x: 0,
         y: 0,
         z: 0,
         dataIn: 'environ dict',
@@ -53,7 +53,7 @@ export const FLASK_NODES = [
         shape: 'default',
         status: 'idle',
         color: 0xC77DBA,
-        x: 3,
+        x: 5,
         y: 0,
         z: 0,
         dataIn: 'URL params',
@@ -68,7 +68,7 @@ export const FLASK_NODES = [
         shape: 'default',
         status: 'idle',
         color: 0xD4826A,
-        x: 8,
+        x: 10,
         y: 0,
         z: 0,
         dataIn: 'Response object',
@@ -83,7 +83,7 @@ export const FLASK_NODES = [
         shape: 'default',
         status: 'idle',
         color: 0x6C9BD2,
-        x: 13,
+        x: 15,
         y: 0,
         z: -3,
         dataIn: 'HTTP response',
@@ -105,6 +105,8 @@ export function buildTrafficRoutes(resourceMeshes) {
     return FLASK_CONNECTIONS.flatMap((connection, index) => {
         const sourceMesh = resourceMeshes.get(connection.sourceId);
         const targetMesh = resourceMeshes.get(connection.targetId);
+        const sourceNode = FLASK_NODES.find((node) => node.id === connection.sourceId);
+        const targetNode = FLASK_NODES.find((node) => node.id === connection.targetId);
         if (!sourceMesh || !targetMesh) {
             return [];
         }
@@ -115,6 +117,7 @@ export function buildTrafficRoutes(resourceMeshes) {
             targetId: connection.targetId,
             sourcePos: sourceMesh.position.clone().add(new THREE.Vector3(0, 0.6, 0)),
             targetPos: targetMesh.position.clone().add(new THREE.Vector3(0, 0.6, 0)),
+            payload: sourceNode?.dataOut || targetNode?.dataIn || '',
             trafficType: index === FLASK_CONNECTIONS.length - 1 ? 'healthy' : 'default',
             requestRate: 1.25
         }];

@@ -49,9 +49,10 @@ function createLabelSprite(text, options = {}) {
         width = 768,
         height = 128,
         maxTextWidth = width - 32,
-        scale = { x: 4.4, y: 0.78, z: 1 }
+        scale = { x: 4.4, y: 0.78, z: 1 },
+        fontFamily = '"Inter", sans-serif'
     } = options;
-    const cacheKey = JSON.stringify({ text, fontSize, width, height, maxTextWidth });
+    const cacheKey = JSON.stringify({ text, fontSize, width, height, maxTextWidth, fontFamily });
 
     let texture = _labelTextureCache.get(cacheKey);
     if (!texture) {
@@ -61,7 +62,7 @@ function createLabelSprite(text, options = {}) {
         const ctx = canvas.getContext('2d');
 
         ctx.clearRect(0, 0, width, height);
-        ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
+        ctx.font = `600 ${fontSize}px ${fontFamily}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
@@ -158,27 +159,27 @@ function createDefaultResource(resource) {
         height: 144,
         scale: { x: 4.2, y: 0.82, z: 1 }
     });
-    nameLabel.position.set(0, 1.15, 0);
+    nameLabel.position.set(0, 1.28, 0);
     group.add(nameLabel);
 
     const dataInText = resource.dataIn ? `IN: ${resource.dataIn}` : 'IN: -';
     const dataInLabel = createLabelSprite(dataInText, {
-        fontSize: 28,
+        fontSize: 24,
         width: 1024,
         height: 128,
-        scale: { x: 4.8, y: 0.64, z: 1 }
+        scale: { x: 4.2, y: 0.56, z: 1 }
     });
-    dataInLabel.position.set(0, 0.15, 0.36);
+    dataInLabel.position.set(0, -0.02, 0.36);
     group.add(dataInLabel);
 
     const dataOutText = resource.dataOut ? `OUT: ${resource.dataOut}` : 'OUT: -';
     const dataOutLabel = createLabelSprite(dataOutText, {
-        fontSize: 28,
+        fontSize: 24,
         width: 1024,
         height: 128,
-        scale: { x: 4.8, y: 0.64, z: 1 }
+        scale: { x: 4.2, y: 0.56, z: 1 }
     });
-    dataOutLabel.position.set(0, -0.45, 0.36);
+    dataOutLabel.position.set(0, -0.68, 0.36);
     group.add(dataOutLabel);
 
     const idleY = resource.y || 0;

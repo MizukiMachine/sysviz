@@ -1,27 +1,27 @@
-const PLAYBACK_DURATION = 8.5;
+const PLAYBACK_DURATION = 8.15;
 
 const TIMELINE_KEYFRAMES = [
     { time: 0.0, type: 'resource', id: 'browser-request', status: 'active' },
-    { time: 0.5, type: 'route', id: 'route-conn-browser-wsgi', active: true },
-    { time: 1.5, type: 'route', id: 'route-conn-browser-wsgi', active: false },
-    { time: 1.5, type: 'resource', id: 'wsgi-server', status: 'active' },
-    { time: 1.5, type: 'resource', id: 'browser-request', status: 'complete' },
-    { time: 2.0, type: 'route', id: 'route-conn-wsgi-routing', active: true },
-    { time: 3.0, type: 'route', id: 'route-conn-wsgi-routing', active: false },
-    { time: 3.0, type: 'resource', id: 'routing', status: 'active' },
-    { time: 3.0, type: 'resource', id: 'wsgi-server', status: 'complete' },
-    { time: 3.5, type: 'route', id: 'route-conn-routing-view', active: true },
-    { time: 4.5, type: 'route', id: 'route-conn-routing-view', active: false },
-    { time: 4.5, type: 'resource', id: 'view-function', status: 'active' },
-    { time: 4.5, type: 'resource', id: 'routing', status: 'complete' },
-    { time: 5.0, type: 'route', id: 'route-conn-view-response', active: true },
-    { time: 6.0, type: 'route', id: 'route-conn-view-response', active: false },
-    { time: 6.0, type: 'resource', id: 'response', status: 'active' },
-    { time: 6.0, type: 'resource', id: 'view-function', status: 'complete' },
-    { time: 6.5, type: 'route', id: 'route-conn-response-browser', active: true },
-    { time: 7.5, type: 'route', id: 'route-conn-response-browser', active: false },
-    { time: 7.5, type: 'resource', id: 'browser-render', status: 'active' },
-    { time: 7.5, type: 'resource', id: 'response', status: 'complete' }
+    { time: 0.4, type: 'route', id: 'route-conn-browser-wsgi', active: true },
+    { time: 1.3, type: 'route', id: 'route-conn-browser-wsgi', active: false },
+    { time: 1.3, type: 'resource', id: 'wsgi-server', status: 'active' },
+    { time: 1.3, type: 'resource', id: 'browser-request', status: 'complete' },
+    { time: 1.75, type: 'route', id: 'route-conn-wsgi-routing', active: true },
+    { time: 2.65, type: 'route', id: 'route-conn-wsgi-routing', active: false },
+    { time: 2.65, type: 'resource', id: 'routing', status: 'active' },
+    { time: 2.65, type: 'resource', id: 'wsgi-server', status: 'complete' },
+    { time: 3.1, type: 'route', id: 'route-conn-routing-view', active: true },
+    { time: 4.0, type: 'route', id: 'route-conn-routing-view', active: false },
+    { time: 4.0, type: 'resource', id: 'view-function', status: 'active' },
+    { time: 4.0, type: 'resource', id: 'routing', status: 'complete' },
+    { time: 4.45, type: 'route', id: 'route-conn-view-response', active: true },
+    { time: 5.35, type: 'route', id: 'route-conn-view-response', active: false },
+    { time: 5.35, type: 'resource', id: 'response', status: 'active' },
+    { time: 5.35, type: 'resource', id: 'view-function', status: 'complete' },
+    { time: 5.8, type: 'route', id: 'route-conn-response-browser', active: true },
+    { time: 6.9, type: 'route', id: 'route-conn-response-browser', active: false },
+    { time: 6.9, type: 'resource', id: 'browser-render', status: 'active' },
+    { time: 6.9, type: 'resource', id: 'response', status: 'complete' }
 ];
 
 export class PlaybackEngine {
