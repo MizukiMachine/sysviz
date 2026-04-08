@@ -117,8 +117,11 @@
         resetPlaybackScene();
         renderer.resetCamera();
       },
-      onStateChange(_state) {
+      onStateChange(state) {
         syncPlaybackControls(playback);
+        if (state === 'idle') {
+          renderer.resetCamera();
+        }
       }
     });
 
