@@ -92,6 +92,7 @@ export class ParticleTrafficSystem {
         this._initLabels();
 
         this.spawnTimers = new Map();
+        this._tmpVec = new THREE.Vector3();
     }
 
     _initGeometry() {
@@ -156,6 +157,7 @@ export class ParticleTrafficSystem {
 
     _getLabelTexture(text) {
         const label = text || '';
+        if (!label) return null;
         if (this.labelTextures.has(label)) {
             return this.labelTextures.get(label);
         }
@@ -391,7 +393,7 @@ export class ParticleTrafficSystem {
     }
 
     _updateActiveParticles(delta) {
-        const tmpVec = new THREE.Vector3();
+        const tmpVec = this._tmpVec;
 
         for (let i = 0; i < POOL_SIZE; i++) {
             const particle = this.particles[i];

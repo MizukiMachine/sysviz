@@ -125,31 +125,27 @@ function createGlowRing(color, radius = 1.05) {
     return ring;
 }
 
-function createDefaultResource(resource) {
-    const group = new THREE.Group();
-    const statusColor = getStatusColor(resource.status);
-    const nodeColor = resource.color || BASE_COLOR;
-
-    const geometry = roundedBoxGeometry(2.8, 1.3, 0.6, 0.18);
-    geometry.center();
-    const material = new THREE.MeshStandardMaterial({
+function createBodyMaterial(nodeColor, statusColor) {
+    return new THREE.MeshStandardMaterial({
         color: nodeColor,
         metalness: 0.15,
         roughness: 0.42,
         emissive: new THREE.Color(statusColor),
         emissiveIntensity: 0.14
     });
-    const body = new THREE.Mesh(geometry, material);
-    group.add(body);
+}
 
+function createEdgeLines(geometry) {
     const edgeGeometry = new THREE.EdgesGeometry(geometry);
     const edgeMaterial = new THREE.LineBasicMaterial({
         color: 0xcbd5e1,
         transparent: true,
         opacity: 0.85
     });
-    group.add(new THREE.LineSegments(edgeGeometry, edgeMaterial));
+    return new THREE.LineSegments(edgeGeometry, edgeMaterial);
+}
 
+function addResourceElements(group, resource, statusColor) {
     const glowRing = createGlowRing(statusColor);
     group.add(glowRing);
 
@@ -187,12 +183,87 @@ function createDefaultResource(resource) {
     group.userData.animate = resource.animate || ((time) => {
         glowRing.material.opacity = 0.12 + (Math.sin(time * 2.4 + (resource.glowOffset || 0)) + 1) * 0.04;
     });
+}
 
+// --- Shape creators ---
+
+function createDefaultResource(resource) {
+    const group = new THREE.Group();
+    const statusColor = getStatusColor(resource.status);
+    const nodeColor = resource.color || BASE_COLOR;
+
+    const geometry = roundedBoxGeometry(2.8, 1.3, 0.6, 0.18);
+    geometry.center();
+    const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
+    group.add(body);
+    group.add(createEdgeLines(geometry));
+
+    addResourceElements(group, resource, statusColor);
+    return group;
+}
+
+function createSphereResource(resource) {
+    const group = new THREE.Group();
+    const statusColor = getStatusColor(resource.status);
+    const nodeColor = resource.color || BASE_COLOR;
+
+    const geometry = new THREE.IcosahedronGeometry(1.0, 2);
+    const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
+    group.add(body);
+    group.add(createEdgeLines(geometry));
+
+    addResourceElements(group, resource, statusColor);
+    return group;
+}
+
+function createCylinderResource(resource) {
+    const group = new THREE.Group();
+    const statusColor = getStatusColor(resource.status);
+    const nodeColor = resource.color || BASE_COLOR;
+
+    const geometry = new THREE.CylinderGeometry(0.9, 0.9, 1.4, 32);
+    const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
+    group.add(body);
+    group.add(createEdgeLines(geometry));
+
+    addResourceElements(group, resource, statusColor);
+    return group;
+}
+
+function createDiamondResource(resource) {
+    const group = new THREE.Group();
+    const statusColor = getStatusColor(resource.status);
+    const nodeColor = resource.color || BASE_COLOR;
+
+    const geometry = new THREE.OctahedronGeometry(1.0, 0);
+    const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
+    group.add(body);
+    group.add(createEdgeLines(geometry));
+
+    addResourceElements(group, resource, statusColor);
+    return group;
+}
+
+function createTorusResource(resource) {
+    const group = new THREE.Group();
+    const statusColor = getStatusColor(resource.status);
+    const nodeColor = resource.color || BASE_COLOR;
+
+    const geometry = new THREE.TorusGeometry(0.7, 0.3, 16, 48);
+    const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
+    group.add(body);
+    group.add(createEdgeLines(geometry));
+
+    addResourceElements(group, resource, statusColor);
     return group;
 }
 
 const CREATORS = {
-    default: createDefaultResource
+    default: createDefaultResource,
+    sphere: createSphereResource,
+    cylinder: createCylinderResource,
+    diamond: createDiamondResource,
+    torus: createTorusResource
 };
 
 export class ResourceMeshFactory {

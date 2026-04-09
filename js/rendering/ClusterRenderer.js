@@ -228,6 +228,9 @@ export class ClusterRenderer {
         const dy = event.clientY - this._clickStart.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > 4) {
+            if (this._cameraTargetAnimation) {
+                this._cameraTargetAnimation = null;
+            }
             if (this._dragCandidate && !this._didDrag) {
                 this._draggingResource = this._dragCandidate;
                 this._dragCandidate = null;

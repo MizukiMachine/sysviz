@@ -5,13 +5,29 @@ const RELATIONSHIP_COLORS = {
     network:   0x93c5fd,
     storage:   0x8b949e,
     config:    0xd29922,
+    sync:      0xa5b4fc,
+    async:     0x67e8f9,
+    signal:    0xfcd34d,
     default:   0xd1d5db
 };
 
-const DASH_SIZE = 0.3;
-const GAP_SIZE = 0.15;
+const DASH_CONFIG = {
+    network:   { dashSize: 0.3, gapSize: 0.15 },
+    sync:      null,
+    async:     { dashSize: 0.3, gapSize: 0.2 },
+    signal:    { dashSize: 0.08, gapSize: 0.08 },
+    default:   { dashSize: 0.3, gapSize: 0.15 }
+};
+
+const FLOW_SPEEDS = {
+    network: 2.0,
+    sync:    2.5,
+    async:   1.0,
+    signal:  3.5,
+    default: 2.0
+};
+
 const CURVE_SEGMENTS = 32;
-const FLOW_SPEED = 2.0;
 const BASE_LINE_WIDTH = 1.5;
 const MIN_OPACITY = 0.25;
 const MAX_OPACITY = 0.7;
@@ -49,15 +65,26 @@ export class ConnectionLineManager {
 
         const relationColor = RELATIONSHIP_COLORS[connection.type] || RELATIONSHIP_COLORS.default;
         const opacity = this._getBaseOpacity(connection);
+        const dashConfig = DASH_CONFIG[connection.type] ?? DASH_CONFIG.default;
 
-        const material = new THREE.LineDashedMaterial({
-            color: relationColor,
-            dashSize: DASH_SIZE,
-            gapSize: GAP_SIZE,
-            transparent: true,
-            opacity,
-            linewidth: BASE_LINE_WIDTH
-        });
+        let material;
+        if (dashConfig === null) {
+            material = new THREE.LineBasicMaterial({
+                color: relationColor,
+                transparent: true,
+                opacity,
+                linewidth: BASE_LINE_WIDTH
+            });
+        } else {
+            material = new THREE.LineDashedMaterial({
+                color: relationColor,
+                dashSize: dashConfig.dashSize,
+                gapSize: dashConfig.gapSize,
+                transparent: true,
+                opacity,
+                linewidth: BASE_LINE_WIDTH
+            });
+        }
 
         const line = new THREE.Line(geometry, material);
         line.computeLineDistances();
@@ -66,7 +93,7 @@ export class ConnectionLineManager {
         line.userData.targetId = connection.targetId;
         line.userData.type = connection.type;
         line.userData.flowOffset = 0;
-        line.userData.flowSpeed = FLOW_SPEED * (0.5 + Math.random() * 0.5);
+        line.userData.flowSpeed = (FLOW_SPEEDS[connection.type] || FLOW_SPEEDS.default) * (0.5 + Math.random() * 0.5);
         line.userData.curve = curve;
 
         this.lineGroup.add(line);
@@ -133,8 +160,9 @@ export class ConnectionLineManager {
         for (const entry of this.connections.values()) {
             const line = entry.line;
             line.userData.flowOffset += line.userData.flowSpeed * delta;
-            const material = line.material;
-            material.dashOffset = -line.userData.flowOffset;
+            if (line.material.isLineDashedMaterial) {
+                line.material.dashOffset = -line.userData.flowOffset;
+            }
         }
     }
 
@@ -142,8 +170,9 @@ export class ConnectionLineManager {
         const entry = this.connections.get(connectionId);
         if (!entry) return;
 
+        const baseSpeed = FLOW_SPEEDS[entry.connection.type] || FLOW_SPEEDS.default;
         entry.line.material.opacity = active ? MAX_OPACITY : this._getBaseOpacity(entry.connection) * 0.35;
-        entry.line.userData.flowSpeed = FLOW_SPEED * (active ? 2.4 : 0.45);
+        entry.line.userData.flowSpeed = baseSpeed * (active ? 2.4 : 0.45);
     }
 
     sync(connectionsMap, resourceMeshes) {
@@ -180,15 +209,17 @@ export class ConnectionLineManager {
         for (const entry of this.connections.values()) {
             const isRelated = entry.connection.sourceId === resourceId ||
                               entry.connection.targetId === resourceId;
+            const baseSpeed = FLOW_SPEEDS[entry.connection.type] || FLOW_SPEEDS.default;
             entry.line.material.opacity = isRelated ? MAX_OPACITY : MIN_OPACITY * 0.5;
-            entry.line.userData.flowSpeed = FLOW_SPEED * (isRelated ? 2 : 0.5);
+            entry.line.userData.flowSpeed = baseSpeed * (isRelated ? 2 : 0.5);
         }
     }
 
     resetHighlight() {
         for (const entry of this.connections.values()) {
+            const baseSpeed = FLOW_SPEEDS[entry.connection.type] || FLOW_SPEEDS.default;
             entry.line.material.opacity = this._getBaseOpacity(entry.connection);
-            entry.line.userData.flowSpeed = FLOW_SPEED * (0.5 + Math.random() * 0.5);
+            entry.line.userData.flowSpeed = baseSpeed * (0.5 + Math.random() * 0.5);
         }
     }
 
