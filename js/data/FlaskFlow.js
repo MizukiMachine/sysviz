@@ -101,6 +101,33 @@ export const FLASK_CONNECTIONS = [
     { id: 'conn-response-browser', sourceId: 'response', targetId: 'browser-render', type: 'network', trafficVolume: 2 }
 ];
 
+export const FLASK_TIMELINE = {
+    duration: 35,
+    keyframes: [
+        { time: 0.0, type: 'resource', id: 'browser-request', status: 'active', caption: 'ユーザーがブラウザで「GET /hello」をリクエストします' },
+        { time: 2.0, type: 'route', id: 'route-conn-browser-wsgi', active: true },
+        { time: 5.8, type: 'route', id: 'route-conn-browser-wsgi', active: false },
+        { time: 6.0, type: 'resource', id: 'wsgi-server', status: 'active', caption: 'WSGIサーバーがリクエストを受け取り、environ辞書に変換します' },
+        { time: 6.0, type: 'resource', id: 'browser-request', status: 'complete' },
+        { time: 8.0, type: 'route', id: 'route-conn-wsgi-routing', active: true },
+        { time: 11.8, type: 'route', id: 'route-conn-wsgi-routing', active: false },
+        { time: 12.0, type: 'resource', id: 'routing', status: 'active', caption: 'URLパターンから対応するビュー関数を特定します' },
+        { time: 12.0, type: 'resource', id: 'wsgi-server', status: 'complete' },
+        { time: 14.0, type: 'route', id: 'route-conn-routing-view', active: true },
+        { time: 17.8, type: 'route', id: 'route-conn-routing-view', active: false },
+        { time: 18.0, type: 'resource', id: 'view-function', status: 'active', caption: 'ビュー関数が実行され、ビジネスロジックを処理してレスポンスを生成します' },
+        { time: 18.0, type: 'resource', id: 'routing', status: 'complete' },
+        { time: 20.0, type: 'route', id: 'route-conn-view-response', active: true },
+        { time: 23.8, type: 'route', id: 'route-conn-view-response', active: false },
+        { time: 24.0, type: 'resource', id: 'response', status: 'active', caption: 'レスポンスオブジェクトがHTTPレスポンス (200 OK) に変換されます' },
+        { time: 24.0, type: 'resource', id: 'view-function', status: 'complete' },
+        { time: 26.0, type: 'route', id: 'route-conn-response-browser', active: true },
+        { time: 31.8, type: 'route', id: 'route-conn-response-browser', active: false },
+        { time: 32.0, type: 'resource', id: 'browser-render', status: 'active', caption: 'ブラウザがレスポンスを受け取り、画面に表示します' },
+        { time: 32.0, type: 'resource', id: 'response', status: 'complete' }
+    ]
+};
+
 export function buildTrafficRoutes(resourceMeshes) {
     return FLASK_CONNECTIONS.flatMap((connection, index) => {
         const sourceMesh = resourceMeshes.get(connection.sourceId);

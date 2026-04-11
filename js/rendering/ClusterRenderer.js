@@ -32,6 +32,7 @@ export class ClusterRenderer {
         this.onResourceMoved = null;
         this._draggingResource = null;
         this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        this.lockDrag = false;
 
         this._initScene();
         this._initCamera();
@@ -53,8 +54,8 @@ export class ClusterRenderer {
     _initCamera() {
         const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
         this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
-        this.camera.position.set(18, 14, 18);
-        this.camera.lookAt(0, 0, 0);
+        this.camera.position.set(2.5, 8, 20);
+        this.camera.lookAt(2.5, 0, 0);
         this._initialCameraPosition.copy(this.camera.position);
     }
 
@@ -87,7 +88,7 @@ export class ClusterRenderer {
         this.controls.maxDistance = 80;
         this.controls.maxPolarAngle = Math.PI / 2.1;
         this.controls.minPolarAngle = 0.1;
-        this.controls.target.set(0, 0, 0);
+        this.controls.target.set(2.5, 0, 0);
         this.controls.mouseButtons = {
             LEFT: THREE.MOUSE.ROTATE,
             MIDDLE: THREE.MOUSE.DOLLY,
@@ -243,6 +244,7 @@ export class ClusterRenderer {
 
     _handleMouseDown(event) {
         if (event.button === 0) {
+            if (this.lockDrag) return;
             this._clickStart.set(event.clientX, event.clientY);
             this._didDrag = false;
             this._dragCandidate = null;

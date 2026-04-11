@@ -61,6 +61,7 @@
       </svg>
     </button>
   </div>
+  <div id="caption-bar" class="caption-bar" aria-live="polite"></div>
 
   <script type="module">
     import { PlaybackEngine } from './js/engine/PlaybackEngine.js';
@@ -68,6 +69,7 @@
     import {
       FLASK_NODES,
       FLASK_CONNECTIONS,
+      FLASK_TIMELINE,
       buildTrafficRoutes
     } from './js/data/FlaskFlow.js';
 
@@ -113,28 +115,24 @@
       stopButton.disabled = engine.state === 'idle' && engine.elapsed === 0;
     }
 
-    const playback = new PlaybackEngine({
+    const playback = new PlaybackEngine(FLASK_TIMELINE, {
       onResourceState(resourceId, status) {
         renderer.setResourceStatus(resourceId, status);
-        if (status === 'active') {
-          const resourceMesh = renderer.resourceMeshes.get(resourceId);
-          if (resourceMesh) {
-            renderer.setCameraTarget(resourceMesh.position, 800);
-          }
-        }
       },
       onRouteState(routeId, active) {
         setRouteActive(routeId, active);
       },
+      onCaption(text) {
+        const captionBar = document.getElementById('caption-bar');
+        captionBar.textContent = text;
+        captionBar.classList.toggle('caption-visible', !!text);
+      },
       onReset() {
         resetPlaybackScene();
-        renderer.resetCamera();
       },
       onStateChange(state) {
         syncPlaybackControls(playback);
-        if (state === 'idle') {
-          renderer.resetCamera();
-        }
+        renderer.lockDrag = (state === 'playing');
       }
     });
 
