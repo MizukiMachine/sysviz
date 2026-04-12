@@ -1,0 +1,80 @@
+flowchart LR
+    %% Flask Data Flow - Auto-generated from architecture analysis %%
+    %% 16 nodes, 8 subgraphs, error branch, U-shape layout %%
+
+    subgraph Input["Input / 入力"]
+        Client["[User] Client<br/>Browser"]
+    end
+
+    subgraph Entry["Entry / エントリポイント"]
+        WSGICall["[Entry] WSGI Call<br/>Flask.__call__()"]
+        Middleware["[Hook] Middleware<br/>WSGIミドルウェア"]
+    end
+
+    subgraph Context["Context / コンテキスト"]
+        PushCtx["[Ctx] AppContext Push<br/>ctx stack"]
+        BindReq["[Hook] Bind Request<br/>LocalProxy"]
+    end
+
+    subgraph Processing["Processing / 処理"]
+        BeforeReq["[Hook] before_request<br/>前処理フック"]
+        URLMatch["[Router] URL Router<br/>url_map.match()"]
+    end
+
+    subgraph View["View / ビュー"]
+        ViewFunc["[View] View Function<br/>ビジネスロジック"]
+        Template["[View] Template<br/>Jinja2 Render"]
+    end
+
+    subgraph Error["Error / エラー"]
+        ErrorHandler["[Error] Error Handler<br/>例外ハンドラ"]
+    end
+
+    subgraph Response["Response / レスポンス"]
+        MakeRes["[Resp] Response Build<br/>Response構築"]
+        AfterReq["[Hook] after_request<br/>後処理フック"]
+    end
+
+    subgraph Cleanup["Cleanup / クリーンアップ"]
+        SessionSave["[Session] Session Save<br/>Cookie保存"]
+        Teardown["[Cleanup] teardown<br/>リソース解放"]
+        PopCtx["[Ctx] Context Pop<br/>ctx解放"]
+    end
+
+    subgraph Output["Output / 出力"]
+        HTTPResp["[Output] HTTP Response<br/>200 OK"]
+    end
+
+    Client -->|HTTP| WSGICall
+    WSGICall --> Middleware
+    Middleware --> PushCtx
+    PushCtx --> BindReq
+    BindReq --> BeforeReq
+    BeforeReq --> URLMatch
+    URLMatch --> ViewFunc
+    ViewFunc --> Template
+    ViewFunc -->|error| ErrorHandler
+    Template --> MakeRes
+    ErrorHandler --> MakeRes
+    MakeRes --> AfterReq
+    AfterReq --> SessionSave
+    SessionSave --> Teardown
+    Teardown --> PopCtx
+    PopCtx --> HTTPResp
+
+    style Client fill:#6C9BD2,stroke:#4A4D60
+    style WSGICall fill:#7BC67E,stroke:#4A4D60
+    style Middleware fill:#7BC67E,stroke:#4A4D60
+    style PushCtx fill:#7BC7C4,stroke:#4A4D60
+    style BindReq fill:#7BC7C4,stroke:#4A4D60
+    style BeforeReq fill:#D4A76A,stroke:#4A4D60
+    style URLMatch fill:#D4A76A,stroke:#4A4D60
+    style ViewFunc fill:#C77DBA,stroke:#4A4D60
+    style Template fill:#C77DBA,stroke:#4A4D60
+    style ErrorHandler fill:#D4826A,stroke:#4A4D60
+    style MakeRes fill:#8BD49E,stroke:#4A4D60
+    style AfterReq fill:#8BD49E,stroke:#4A4D60
+    style SessionSave fill:#8BD49E,stroke:#4A4D60
+    style Teardown fill:#9AABB8,stroke:#4A4D60
+    style PopCtx fill:#9AABB8,stroke:#4A4D60
+    style HTTPResp fill:#6C9BD2,stroke:#4A4D60

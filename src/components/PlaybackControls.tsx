@@ -1,0 +1,78 @@
+import { Play, Pause, Square, SkipBack, SkipForward } from 'lucide-react';
+import type { PlaybackState } from '@/hooks/usePlayback';
+
+interface PlaybackControlsProps {
+  state: PlaybackState;
+  onPlay: () => void;
+  onPause: () => void;
+  onStop: () => void;
+  onNext: () => void;
+  onPrev: () => void;
+}
+
+export function PlaybackControls({ state, onPlay, onPause, onStop, onNext, onPrev }: PlaybackControlsProps) {
+  const isPlaying = state === 'playing';
+  const isIdle = state === 'idle';
+
+  return (
+    <div
+      className="fixed left-1/2 bottom-7 z-20 flex items-center gap-2.5 px-3.5 py-3 glass-pill"
+      aria-label="Playback controls"
+    >
+      <ControlButton onClick={onPrev} disabled={isIdle} ariaLabel="Back">
+        <SkipBack size={20} />
+      </ControlButton>
+      <ControlButton onClick={onPlay} disabled={isPlaying} ariaLabel="Play">
+        <Play size={20} />
+      </ControlButton>
+      <ControlButton onClick={onPause} disabled={!isPlaying} ariaLabel="Pause">
+        <Pause size={20} />
+      </ControlButton>
+      <ControlButton onClick={onStop} disabled={isIdle} ariaLabel="Stop" variant="stop">
+        <Square size={18} />
+      </ControlButton>
+      <ControlButton onClick={onNext} disabled={isIdle} ariaLabel="Next">
+        <SkipForward size={20} />
+      </ControlButton>
+    </div>
+  );
+}
+
+function ControlButton({
+  onClick,
+  disabled,
+  ariaLabel,
+  variant = 'default',
+  children,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  ariaLabel: string;
+  variant?: 'default' | 'stop';
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      type="button"
+      className={`
+        inline-flex items-center justify-center
+        w-11 h-11 p-0 border-0 rounded-full
+        cursor-pointer
+        transition-all duration-140 ease-in-out
+        ${
+          variant === 'stop'
+            ? 'bg-gradient-to-b from-orange-50 to-amber-100 text-amber-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_18px_rgba(15,23,42,0.12)]'
+            : 'bg-gradient-to-b from-white to-slate-100 text-slate-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_18px_rgba(15,23,42,0.12)]'
+        }
+        hover:not-disabled:-translate-y-px hover:not-disabled:shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_12px_24px_rgba(15,23,42,0.16)]
+        active:not-disabled:translate-y-0
+        disabled:opacity-45 disabled:cursor-default disabled:shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_6px_14px_rgba(15,23,42,0.08)]
+      `}
+    >
+      {children}
+    </button>
+  );
+}
