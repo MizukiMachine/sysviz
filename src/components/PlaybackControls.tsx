@@ -1,37 +1,35 @@
-import { Play, Pause, Square, SkipBack, SkipForward } from 'lucide-react';
-import type { PlaybackState } from '@/hooks/usePlayback';
+import { Play, Square, SkipBack, SkipForward } from 'lucide-react';
+import type { PlaybackInfo } from '@/hooks/usePlayback';
 
 interface PlaybackControlsProps {
-  state: PlaybackState;
+  info: PlaybackInfo;
   onPlay: () => void;
-  onPause: () => void;
   onStop: () => void;
   onNext: () => void;
   onPrev: () => void;
 }
 
-export function PlaybackControls({ state, onPlay, onPause, onStop, onNext, onPrev }: PlaybackControlsProps) {
-  const isPlaying = state === 'playing';
-  const isIdle = state === 'idle';
+export function PlaybackControls({ info, onPlay, onStop, onNext, onPrev }: PlaybackControlsProps) {
+  const isPlaying = info.state === 'playing';
+  const isIdle = info.state === 'idle';
+  const isFirstStep = info.currentStep <= 0;
+  const isLastStep = info.currentStep >= info.totalSteps - 1 && info.currentStep >= 0;
 
   return (
     <div
       className="fixed left-1/2 bottom-7 z-20 flex items-center gap-2.5 px-3.5 py-3 glass-pill"
       aria-label="Playback controls"
     >
-      <ControlButton onClick={onPrev} disabled={isIdle} ariaLabel="Back">
+      <ControlButton onClick={onPrev} disabled={isFirstStep} ariaLabel="Previous step">
         <SkipBack size={20} />
       </ControlButton>
-      <ControlButton onClick={onPlay} disabled={isPlaying} ariaLabel="Play">
+      <ControlButton onClick={onPlay} disabled={isPlaying} ariaLabel="Play current step">
         <Play size={20} />
       </ControlButton>
-      <ControlButton onClick={onPause} disabled={!isPlaying} ariaLabel="Pause">
-        <Pause size={20} />
-      </ControlButton>
-      <ControlButton onClick={onStop} disabled={isIdle} ariaLabel="Stop" variant="stop">
+      <ControlButton onClick={onStop} disabled={isIdle} ariaLabel="Stop">
         <Square size={18} />
       </ControlButton>
-      <ControlButton onClick={onNext} disabled={isIdle} ariaLabel="Next">
+      <ControlButton onClick={onNext} disabled={isLastStep} ariaLabel="Next step">
         <SkipForward size={20} />
       </ControlButton>
     </div>

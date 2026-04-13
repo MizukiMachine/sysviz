@@ -120,7 +120,7 @@ function createGlowRing(color, radius = 1.05) {
     });
     const ring = new THREE.Mesh(geometry, material);
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = -0.5;
+    ring.position.y = -0.5 + 1.2;
     ring.userData.isGlow = true;
     return ring;
 }

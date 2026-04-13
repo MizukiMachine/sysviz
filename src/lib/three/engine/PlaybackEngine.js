@@ -20,6 +20,9 @@ export class PlaybackEngine {
         this.nextKeyframeIndex = 0;
         this.steps = [];
         this.currentStep = -1;
+        this.stepLoopMode = false;
+        this.stepStart = 0;
+        this.stepEnd = 0;
         this._extractSteps();
     }
 
@@ -34,14 +37,10 @@ export class PlaybackEngine {
     }
 
     play() {
+        if (this.steps.length === 0) return;
         if (this.state === 'playing') return;
-
-        if (this.state === 'idle') {
-            this._rewind();
-            this._drainKeyframesAtCurrentTime();
-        }
-
-        this._setState('playing');
+        if (this.currentStep < 0) this.currentStep = 0;
+        this._startStepLoop(this.currentStep);
     }
 
     pause() {
@@ -50,6 +49,7 @@ export class PlaybackEngine {
     }
 
     stop() {
+        this.stepLoopMode = false;
         this._rewind();
         this._setState('idle');
         this.currentStep = -1;
@@ -59,41 +59,51 @@ export class PlaybackEngine {
         if (this.steps.length === 0) return;
         if (this.currentStep >= this.steps.length - 1) return;
         this.currentStep++;
-        this._goToStep(this.currentStep);
+        this._startStepLoop(this.currentStep);
     }
 
     prev() {
         if (this.steps.length === 0) return;
         if (this.currentStep <= 0) return;
         this.currentStep--;
-        this._goToStep(this.currentStep);
+        this._startStepLoop(this.currentStep);
     }
 
-    _goToStep(stepIndex) {
+    _startStepLoop(stepIndex) {
+        const step = this.steps[stepIndex];
+        const nextStepTime = stepIndex < this.steps.length - 1
+            ? this.steps[stepIndex + 1].time
+            : this.duration;
+
+        this.stepLoopMode = true;
+        this.stepStart = step.time;
+        this.stepEnd = nextStepTime;
+
+        // Reset all resources to idle, then apply baseline (previous steps complete)
         if (this.onReset) this.onReset();
         if (this.onCaption) this.onCaption('');
 
-        const step = this.steps[stepIndex];
-        const applyUntilTime = step.time + 1.5;
-
-        let lastAppliedIndex = -1;
-        for (let i = 0; i < this.keyframes.length; i++) {
-            if (this.keyframes[i].time <= applyUntilTime) {
-                this._applyKeyframe(this.keyframes[i]);
-                lastAppliedIndex = i;
-            } else {
-                break;
+        // Apply baseline: all keyframes before this step's start time
+        for (const frame of this.keyframes) {
+            if (frame.time < this.stepStart) {
+                this._applyKeyframe(frame);
             }
         }
 
-        this.nextKeyframeIndex = lastAppliedIndex + 1;
-        this.elapsed = step.time + 1.5;
-
-        this.state = 'paused';
-        if (this.onStateChange) {
-            this.onStateChange('paused', { elapsed: this.elapsed, duration: this.duration });
+        // Apply the step's own starting keyframes (node active, caption)
+        this.elapsed = this.stepStart;
+        this.nextKeyframeIndex = this.keyframes.findIndex(f => f.time >= this.stepStart);
+        if (this.nextKeyframeIndex === -1) this.nextKeyframeIndex = this.keyframes.length;
+        while (this.nextKeyframeIndex < this.keyframes.length) {
+            const frame = this.keyframes[this.nextKeyframeIndex];
+            if (frame.time > this.stepStart) break;
+            this._applyKeyframe(frame);
+            this.nextKeyframeIndex++;
         }
 
+        this._setState('playing');
+
+        // Notify step change (camera movement happens here, not in onResourceState)
         if (this.onStepChange) {
             const nextNodeId = stepIndex < this.steps.length - 1
                 ? this.steps[stepIndex + 1].nodeId
@@ -105,19 +115,52 @@ export class PlaybackEngine {
     update(delta) {
         if (this.state !== 'playing') return;
 
-        this.elapsed = Math.min(this.elapsed + delta, this.duration);
+        this.elapsed += delta;
         this._drainKeyframesAtCurrentTime();
+
+        // Step loop: when the step's time window ends, reset and replay
+        if (this.stepLoopMode && this.elapsed >= this.stepEnd) {
+            this._loopReset();
+            return;
+        }
 
         if (this.elapsed >= this.duration) {
             this._setState('idle');
         }
     }
 
+    _loopReset() {
+        const step = this.steps[this.currentStep];
+        if (!step) return;
+
+        // Restore current node to active (was set to complete at stepEnd)
+        if (this.onResourceState) {
+            this.onResourceState(step.nodeId, 'active');
+        }
+
+        // Reset next step's node to idle (was activated at stepEnd)
+        if (this.currentStep < this.steps.length - 1) {
+            const nextNodeId = this.steps[this.currentStep + 1].nodeId;
+            if (this.onResourceState) {
+                this.onResourceState(nextNodeId, 'idle');
+            }
+        }
+
+        // Restore caption
+        if (this.onCaption) {
+            this.onCaption(step.caption || '');
+        }
+
+        // Rewind elapsed and keyframe index to step start
+        this.elapsed = this.stepStart;
+        this.nextKeyframeIndex = this.keyframes.findIndex(f => f.time >= this.stepStart);
+        if (this.nextKeyframeIndex === -1) this.nextKeyframeIndex = this.keyframes.length;
+    }
+
     _drainKeyframesAtCurrentTime() {
         while (this.nextKeyframeIndex < this.keyframes.length) {
             const frame = this.keyframes[this.nextKeyframeIndex];
             if (frame.time > this.elapsed) break;
-
             this._applyKeyframe(frame);
             this.nextKeyframeIndex += 1;
         }
@@ -144,6 +187,7 @@ export class PlaybackEngine {
 
     setTimeline(timeline) {
         this.state = 'idle';
+        this.stepLoopMode = false;
         this.elapsed = 0;
         this.duration = timeline.duration;
         this.keyframes = timeline.keyframes.map((frame) => ({ ...frame }));

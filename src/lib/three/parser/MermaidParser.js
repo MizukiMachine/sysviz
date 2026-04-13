@@ -1,7 +1,21 @@
 import * as THREE from 'three';
 import dagre from 'dagre';
 
-// --- Tag → Shape mapping (PHASE1-MERMAID-PARSER.md Section 3) ---
+// --- Mermaid standard shape → 3D mapping (generic engine) ---
+
+const MERMAID_SHAPE_3D = {
+    default:       { shape: 'default',  type: 'application' },
+    rounded:       { shape: 'default',  type: 'application' },
+    diamond:       { shape: 'diamond',  type: 'application' },
+    circle:        { shape: 'sphere',   type: 'browser' },
+    database:      { shape: 'cylinder', type: 'datastore' },
+    subroutine:    { shape: 'cylinder', type: 'server' },
+    hexagon:       { shape: 'diamond',  type: 'application' },
+    parallelogram: { shape: 'default',  type: 'application' },
+    asymmetric:    { shape: 'default',  type: 'application' },
+};
+
+// --- Enriched [Tag] → Shape mapping (backward compatible with .mmd files using tags) ---
 
 const TAG_SHAPE_MAP = {
     'User':    { shape: 'sphere',   type: 'browser' },
@@ -29,6 +43,15 @@ const LABEL_TYPE_MAP = {
     'async':     { type: 'async',   trafficVolume: 1 },
     'config':    { type: 'config',  trafficVolume: 1 },
     'store':     { type: 'storage', trafficVolume: 1 },
+};
+
+// --- Line style → Connection type mapping (Mermaid standard) ---
+
+const LINE_STYLE_TYPE_MAP = {
+    '-.->': { type: 'async',   trafficVolume: 1 },
+    '==>':  { type: 'network', trafficVolume: 3 },
+    '-->':  { type: 'sync',    trafficVolume: 2 },
+    '---':  { type: 'sync',    trafficVolume: 2 },
 };
 
 // --- Fallback palette (Section 4) ---
@@ -174,22 +197,22 @@ export class MermaidParser {
             const stM = t.match(/^style\s+(\w+)\s+fill:(#[0-9A-Fa-f]{6})/);
             if (stM) { styles.set(stM[1], stM[2]); continue; }
 
-            // Connection — comprehensive pattern:
-            // Handles bare IDs (A-->B), inline definitions (A["text"]-->B["text"]),
-            // and edge labels (A-->|HTTP|B) in a single regex.
-            const edgeM = t.match(/^(\w+)(?:\["([^"]*)"\])?\s*-->\s*(?:\|([^|]+)\|\s*)?(\w+)(?:\["([^"]*)"\])?$/);
+            // Connection — supports Mermaid line styles: -->, -.->, ==>, ---
+            // Handles bare IDs, inline [text] definitions, and edge labels
+            const edgeM = t.match(/^(\w+)(?:\["([^"]*)"|\[([^\]]*)\])?\s*(-\.->|==>|-->|---)\s*(?:\|([^|]+)\|\s*)?(\w+)(?:\["([^"]*)"|\[([^\]]*)\])?$/);
             if (edgeM) {
                 const sourceId = edgeM[1];
-                const sourceLabel = edgeM[2];
-                const edgeLabel = edgeM[3];
-                const targetId = edgeM[4];
-                const targetLabel = edgeM[5];
+                const sourceLabel = edgeM[2] !== undefined ? edgeM[2] : edgeM[3];
+                const lineStyle = edgeM[4];
+                const edgeLabel = edgeM[5];
+                const targetId = edgeM[6];
+                const targetLabel = edgeM[7] !== undefined ? edgeM[7] : edgeM[8];
 
                 // Register inline node definitions if node not already defined
                 this._registerInlineNode(rawNodes, sourceId, sourceLabel);
                 this._registerInlineNode(rawNodes, targetId, targetLabel);
 
-                rawConnections.push({ source: sourceId, target: targetId, label: edgeLabel ? edgeLabel.trim() : null });
+                rawConnections.push({ source: sourceId, target: targetId, label: edgeLabel ? edgeLabel.trim() : null, lineStyle: lineStyle || '-->' });
 
                 // P2 fix: record subgraph membership for edge-discovered nodes
                 if (currentSubgraph) {
@@ -208,7 +231,8 @@ export class MermaidParser {
                     id: ntM[1],
                     tag: ntM[2],
                     text: ntM[3],
-                    name: namePart || ntM[1]
+                    name: namePart || ntM[1],
+                    mermaidShape: null
                 });
                 if (currentSubgraph) nodeSubgraphs.set(ntM[1], currentSubgraph);
                 continue;
@@ -222,9 +246,70 @@ export class MermaidParser {
                     id: nM[1],
                     tag: null,
                     text: nM[2],
-                    name: namePart || nM[1]
+                    name: namePart || nM[1],
+                    mermaidShape: null
                 });
                 if (currentSubgraph) nodeSubgraphs.set(nM[1], currentSubgraph);
+                continue;
+            }
+
+            // Circle: ID((text))
+            const cirM = t.match(/^(\w+)\(\(\s*(.+)\s*\)\)$/);
+            if (cirM) {
+                const text = cirM[2].trim().replace(/^"|"$/g, '');
+                const namePart = text.split('<br/>')[0].trim();
+                rawNodes.set(cirM[1], {
+                    id: cirM[1], tag: null, text, name: namePart || cirM[1], mermaidShape: 'circle'
+                });
+                if (currentSubgraph) nodeSubgraphs.set(cirM[1], currentSubgraph);
+                continue;
+            }
+
+            // Database: ID[(text)]
+            const dbM = t.match(/^(\w+)\[\(\s*(.+)\s*\)\]$/);
+            if (dbM) {
+                const text = dbM[2].trim().replace(/^"|"$/g, '');
+                const namePart = text.split('<br/>')[0].trim();
+                rawNodes.set(dbM[1], {
+                    id: dbM[1], tag: null, text, name: namePart || dbM[1], mermaidShape: 'database'
+                });
+                if (currentSubgraph) nodeSubgraphs.set(dbM[1], currentSubgraph);
+                continue;
+            }
+
+            // Diamond: ID{text}
+            const diaM = t.match(/^(\w+)\{(?:"(.+)"|(.+))\}$/);
+            if (diaM) {
+                const text = (diaM[2] !== undefined ? diaM[2] : diaM[3]).trim();
+                const namePart = text.split('<br/>')[0].trim();
+                rawNodes.set(diaM[1], {
+                    id: diaM[1], tag: null, text, name: namePart || diaM[1], mermaidShape: 'diamond'
+                });
+                if (currentSubgraph) nodeSubgraphs.set(diaM[1], currentSubgraph);
+                continue;
+            }
+
+            // Rounded: ID(text) — must be checked after circle ((...))
+            const rndM = t.match(/^(\w+)\((?!\()(?:"(.+)"|(.+))\)$/);
+            if (rndM) {
+                const text = (rndM[2] !== undefined ? rndM[2] : rndM[3]).trim();
+                const namePart = text.split('<br/>')[0].trim();
+                rawNodes.set(rndM[1], {
+                    id: rndM[1], tag: null, text, name: namePart || rndM[1], mermaidShape: 'rounded'
+                });
+                if (currentSubgraph) nodeSubgraphs.set(rndM[1], currentSubgraph);
+                continue;
+            }
+
+            // Rectangle (unquoted): ID[text] — must be checked after database [(...)]
+            const rectM = t.match(/^(\w+)\[(?!\[)([^\]]*)\]$/);
+            if (rectM) {
+                const text = rectM[2].trim();
+                const namePart = text.split('<br/>')[0].trim();
+                rawNodes.set(rectM[1], {
+                    id: rectM[1], tag: null, text, name: namePart || rectM[1], mermaidShape: 'default'
+                });
+                if (currentSubgraph) nodeSubgraphs.set(rectM[1], currentSubgraph);
                 continue;
             }
         }
@@ -234,7 +319,7 @@ export class MermaidParser {
 
     _ensureNode(rawNodes, id) {
         if (!rawNodes.has(id)) {
-            rawNodes.set(id, { id, tag: null, text: id, name: id });
+            rawNodes.set(id, { id, tag: null, text: id, name: id, mermaidShape: null });
         }
     }
 
@@ -249,10 +334,10 @@ export class MermaidParser {
         const tagMatch = label.match(/^\[(\w+)\]\s*(.*)$/);
         if (tagMatch) {
             const namePart = tagMatch[2].split('<br/>')[0].trim();
-            rawNodes.set(id, { id, tag: tagMatch[1], text: label, name: namePart || id });
+            rawNodes.set(id, { id, tag: tagMatch[1], text: label, name: namePart || id, mermaidShape: null });
         } else {
             const namePart = label.split('<br/>')[0].trim();
-            rawNodes.set(id, { id, tag: null, text: label, name: namePart || id });
+            rawNodes.set(id, { id, tag: null, text: label, name: namePart || id, mermaidShape: null });
         }
     }
 
@@ -262,12 +347,23 @@ export class MermaidParser {
         const nodes = [];
         let i = 0;
         for (const raw of tokens.rawNodes.values()) {
-            const tagInfo = TAG_SHAPE_MAP[raw.tag] || { shape: 'default', type: 'application' };
+            // Priority: mermaidShape (syntax) > tag (enriched) > default
+            let shape = 'default';
+            let type = 'application';
+
+            if (raw.mermaidShape) {
+                const info = MERMAID_SHAPE_3D[raw.mermaidShape];
+                if (info) { shape = info.shape; type = info.type; }
+            } else if (raw.tag) {
+                const info = TAG_SHAPE_MAP[raw.tag];
+                if (info) { shape = info.shape; type = info.type; }
+            }
+
             nodes.push({
                 id: raw.id,
                 name: raw.name,
-                type: tagInfo.type,
-                shape: tagInfo.shape,
+                type,
+                shape,
                 status: 'idle',
                 color: 0xe2e8f0,
                 x: 0, y: 0, z: 0,
@@ -285,8 +381,12 @@ export class MermaidParser {
 
     _buildConnections(tokens) {
         return tokens.rawConnections.map(rc => {
-            let type = 'sync';
-            let trafficVolume = 2;
+            // Base type from line style
+            const ls = LINE_STYLE_TYPE_MAP[rc.lineStyle] || LINE_STYLE_TYPE_MAP['-->'];
+            let type = ls.type;
+            let trafficVolume = ls.trafficVolume;
+
+            // Override with label-based mapping if available
             if (rc.label) {
                 const mapped = LABEL_TYPE_MAP[rc.label] || LABEL_TYPE_MAP[rc.label.toLowerCase()];
                 if (mapped) {
@@ -328,7 +428,7 @@ export class MermaidParser {
         const X_STEP = 5;
         for (let i = 0; i < sorted.length; i++) {
             sorted[i].x = i * X_STEP;
-            sorted[i].y = 0;
+            sorted[i].y = 1.2;
             sorted[i].z = 0;
         }
 
@@ -424,8 +524,8 @@ export class MermaidParser {
         const cx = (minX + maxX) / 2;
         const spread = Math.max(maxX - minX, 10);
         return {
-            position: [cx, 3, cx + spread * 0.8],
-            target: [cx, 0, 0]
+            position: [cx, 4, cx + spread * 0.8],
+            target: [cx, 1.2, 0]
         };
     }
 

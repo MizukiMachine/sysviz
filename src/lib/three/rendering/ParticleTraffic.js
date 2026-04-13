@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 
-const POOL_SIZE = 2048;
-const PARTICLE_BASE_SIZE = 3.0;
-const PARTICLE_MIN_SPEED = 1.5;
-const PARTICLE_MAX_SPEED = 4.0;
-const SPAWN_INTERVAL = 0.05;
-const TRAIL_LENGTH = 3;
+const POOL_SIZE = 512;
+const PARTICLE_BASE_SIZE = 5.0;
+const PARTICLE_MIN_SPEED = 0.7;
+const PARTICLE_MAX_SPEED = 1.5;
+const SPAWN_INTERVAL = 1.2;
+const TRAIL_LENGTH = 0;
 const FADE_IN_DURATION = 0.15;
 const FADE_OUT_START = 0.85;
-const PARTICLE_LABEL_SCALE = { x: 1.7, y: 0.38, z: 1 };
+const PARTICLE_LABEL_SCALE = { x: 3.0, y: 0.75, z: 1 };
 
 const TRAFFIC_COLORS = {
     healthy: new THREE.Color(0x3fb950),
@@ -163,20 +163,20 @@ export class ParticleTrafficSystem {
         }
 
         const canvas = document.createElement('canvas');
-        canvas.width = 768;
-        canvas.height = 112;
+        canvas.width = 1024;
+        canvas.height = 160;
         const ctx = canvas.getContext('2d');
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.font = '600 24px "Inter", sans-serif';
+        ctx.font = '600 32px "Inter", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        const textWidth = Math.min(ctx.measureText(label).width + 34, canvas.width - 12);
-        const boxHeight = 56;
+        const textWidth = Math.min(ctx.measureText(label).width + 44, canvas.width - 16);
+        const boxHeight = 72;
         const boxX = (canvas.width - textWidth) / 2;
         const boxY = (canvas.height - boxHeight) / 2;
-        const radius = 14;
+        const radius = 16;
 
         ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
         ctx.beginPath();
@@ -197,7 +197,7 @@ export class ParticleTrafficSystem {
         ctx.stroke();
 
         ctx.fillStyle = '#0f172a';
-        ctx.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 48);
+        ctx.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 64);
 
         const texture = new THREE.CanvasTexture(canvas);
         texture.minFilter = THREE.LinearFilter;

@@ -69,7 +69,6 @@ export default function App() {
     info: playbackInfo,
     initEngine,
     play,
-    pause,
     stop,
     next,
     prev,
@@ -187,9 +186,8 @@ export default function App() {
       />
 
       <PlaybackControls
-        state={playbackInfo.state}
+        info={playbackInfo}
         onPlay={play}
-        onPause={pause}
         onStop={stop}
         onNext={next}
         onPrev={prev}

@@ -45,22 +45,22 @@ flowchart LR
         HTTPResp["[Output] HTTP Response<br/>200 OK"]
     end
 
-    Client -->|HTTP| WSGICall
-    WSGICall --> Middleware
-    Middleware --> PushCtx
-    PushCtx --> BindReq
-    BindReq --> BeforeReq
-    BeforeReq --> URLMatch
-    URLMatch --> ViewFunc
-    ViewFunc --> Template
-    ViewFunc -->|error| ErrorHandler
-    Template --> MakeRes
-    ErrorHandler --> MakeRes
-    MakeRes --> AfterReq
-    AfterReq --> SessionSave
-    SessionSave --> Teardown
-    Teardown --> PopCtx
-    PopCtx --> HTTPResp
+    Client -->|HTTP Request| WSGICall
+    WSGICall -->|WSGI Environ| Middleware
+    Middleware -->|Request Init| PushCtx
+    PushCtx -->|Context Push| BindReq
+    BindReq -->|Hook Chain| BeforeReq
+    BeforeReq -->|Route Dispatch| URLMatch
+    URLMatch -->|Matched Route| ViewFunc
+    ViewFunc -->|Render Context| Template
+    ViewFunc -->|Exception| ErrorHandler
+    Template -->|HTML| MakeRes
+    ErrorHandler -->|Error Response| MakeRes
+    MakeRes -->|Response Obj| AfterReq
+    AfterReq -->|Session Data| SessionSave
+    SessionSave -->|Cleanup Signal| Teardown
+    Teardown -->|Context Release| PopCtx
+    PopCtx -->|HTTP Response| HTTPResp
 
     style Client fill:#6C9BD2,stroke:#4A4D60
     style WSGICall fill:#7BC67E,stroke:#4A4D60

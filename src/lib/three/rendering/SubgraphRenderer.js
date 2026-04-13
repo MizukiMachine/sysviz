@@ -1,12 +1,71 @@
 import * as THREE from 'three';
-import { createLabelSprite } from './ResourceMeshes.js';
 
 // Design colors from sysviz-design.md
-const BOX_COLOR = 0xfafafa;        // off-white
-const BOX_OPACITY = 0.12;
-const EDGE_COLOR = 0xd1d5db;       // slate gray
-const EDGE_OPACITY = 0.45;
+const BOX_COLOR = 0xf0f4f8;        // soft blue-tinted white
+const BOX_OPACITY = 0.35;
+const EDGE_COLOR = 0x94a3b8;       // slate-400
+const EDGE_OPACITY = 0.7;
 const PADDING = 2.0;
+const BOX_HEIGHT = 2.4;
+const BANNER_BG = '#e2e8f0';       // slate-200 — visible but muted
+const BANNER_EDGE = '#94a3b8';     // slate-400 — matches box edges
+
+function createBannerLabel(text) {
+    const canvas = document.createElement('canvas');
+    const cW = 768;
+    const cH = 80;
+    canvas.width = cW;
+    canvas.height = cH;
+    const ctx = canvas.getContext('2d');
+
+    ctx.clearRect(0, 0, cW, cH);
+    ctx.font = '600 28px "Inter", sans-serif';
+    const metrics = ctx.measureText(text);
+    const textW = Math.min(metrics.width + 40, cW - 20);
+    const boxH = 44;
+    const boxX = (cW - textW) / 2;
+    const boxY = (cH - boxH) / 2;
+    const r = 10;
+
+    // Banner background
+    ctx.fillStyle = BANNER_BG;
+    ctx.beginPath();
+    ctx.moveTo(boxX + r, boxY);
+    ctx.lineTo(boxX + textW - r, boxY);
+    ctx.quadraticCurveTo(boxX + textW, boxY, boxX + textW, boxY + r);
+    ctx.lineTo(boxX + textW, boxY + boxH - r);
+    ctx.quadraticCurveTo(boxX + textW, boxY + boxH, boxX + textW - r, boxY + boxH);
+    ctx.lineTo(boxX + r, boxY + boxH);
+    ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r);
+    ctx.lineTo(boxX, boxY + r);
+    ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Banner border
+    ctx.strokeStyle = BANNER_EDGE;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Text
+    ctx.fillStyle = '#0f172a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, cW / 2, cH / 2, cW - 40);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false,
+        sizeAttenuation: true
+    }));
+    sprite.scale.set(3.6, 0.38, 1);
+    sprite.userData.isLabel = true;
+    sprite.renderOrder = 5;
+    return sprite;
+}
 
 export class SubgraphRenderer {
     constructor(scene) {
@@ -60,12 +119,11 @@ export class SubgraphRenderer {
             const depth = maxZ - minZ + PADDING * 2;
             const cx = (minX + maxX) / 2;
             const cz = (minZ + maxZ) / 2;
-            const height = 1.2;
 
             const sgGroup = new THREE.Group();
 
             // Semi-transparent box
-            const boxGeo = new THREE.BoxGeometry(width, height, depth);
+            const boxGeo = new THREE.BoxGeometry(width, BOX_HEIGHT, depth);
             const boxMat = new THREE.MeshStandardMaterial({
                 color: BOX_COLOR,
                 transparent: true,
@@ -74,7 +132,7 @@ export class SubgraphRenderer {
                 side: THREE.DoubleSide
             });
             const box = new THREE.Mesh(boxGeo, boxMat);
-            box.position.set(cx, -0.1, cz);
+            box.position.set(cx, BOX_HEIGHT / 2, cz);
             sgGroup.add(box);
 
             // Edge wireframe
@@ -85,19 +143,13 @@ export class SubgraphRenderer {
                 opacity: EDGE_OPACITY
             });
             const edges = new THREE.LineSegments(edgesGeo, edgesMat);
-            edges.position.set(cx, -0.1, cz);
+            edges.position.set(cx, BOX_HEIGHT / 2, cz);
             sgGroup.add(edges);
 
-            // Group name label at top
+            // Banner label — sits at the top edge, half overlapping the box
             const title = sg.title || sg.id;
-            const label = createLabelSprite(title, {
-                fontSize: 20,
-                width: 512,
-                height: 48,
-                scale: { x: 3.0, y: 0.32, z: 1 }
-            });
-            label.position.set(cx, height / 2 + 0.3, cz);
-            label.renderOrder = 5;
+            const label = createBannerLabel(title);
+            label.position.set(cx, BOX_HEIGHT - 0.05, cz);
             sgGroup.add(label);
 
             this.group.add(sgGroup);

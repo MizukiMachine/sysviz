@@ -32,25 +32,6 @@ export function usePlayback() {
     const engine = new PlaybackEngine(timeline, {
       onResourceState(resourceId: string, status: string) {
         renderer.setResourceStatus(resourceId, status);
-        if (status === 'active') {
-          const mesh = renderer.resourceMeshes.get(resourceId);
-          if (mesh) {
-            const stepIdx = engine.steps.findIndex((s: any) => s.nodeId === resourceId);
-            const nextNodeId =
-              stepIdx >= 0 && stepIdx < engine.steps.length - 1
-                ? engine.steps[stepIdx + 1].nodeId
-                : null;
-            let targetPos = mesh.position.clone();
-            if (nextNodeId) {
-              const nextMesh = renderer.resourceMeshes.get(nextNodeId);
-              if (nextMesh) {
-                targetPos = mesh.position.clone().add(nextMesh.position).multiplyScalar(0.5);
-              }
-            }
-            const cameraPos = targetPos.clone().add(new THREE.Vector3(0, 3, 14));
-            renderer.flyTo(targetPos, cameraPos, 1000);
-          }
-        }
       },
       onRouteState(routeId: string, active: boolean) {
         renderer.setTrafficRouteActive(routeId, active);
@@ -62,6 +43,13 @@ export function usePlayback() {
       onReset() {
         for (const id of [...renderer.resourceMeshes.keys()]) {
           renderer.setResourceStatus(id, 'idle');
+        }
+        renderer.clearTrafficParticles();
+        for (const id of [...renderer.particleTraffic.routes.keys()]) {
+          renderer.setTrafficRouteActive(id, false);
+        }
+        for (const id of [...renderer.connectionLines.connections.keys()]) {
+          renderer.setConnectionActive(id, false);
         }
       },
       onStateChange(state: string) {
@@ -76,6 +64,7 @@ export function usePlayback() {
           currentCaption: caption || '',
           activeNodeId: nodeId,
         }));
+        // Camera flies to the active node only on step change (not on loop resets)
         const mesh = renderer.resourceMeshes.get(nodeId);
         if (mesh) {
           let targetPos = mesh.position.clone();

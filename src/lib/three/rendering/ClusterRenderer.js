@@ -5,9 +5,6 @@ import { ConnectionLineManager } from './ConnectionLines.js';
 import { ParticleTrafficSystem } from './ParticleTraffic.js';
 
 const BACKGROUND_COLOR = 0xfafafa;
-const GRID_COLOR = 0xd1d5db;
-const GRID_SIZE = 40;
-const GRID_DIVISIONS = 20;
 const HIGHLIGHT_COLOR = 0xbfdbfe;
 const SELECT_COLOR = 0xfbcfe8;
 
@@ -39,7 +36,6 @@ export class ClusterRenderer {
         this._initRenderer();
         this._initControls();
         this._initLights();
-        this._initGrid();
         this._initRaycaster();
         this._initSubsystems();
         this._bindEvents();
@@ -126,58 +122,6 @@ export class ClusterRenderer {
         const rimLight = new THREE.DirectionalLight(0xf8fafc, 0.25);
         rimLight.position.set(-14, 10, -12);
         this.scene.add(rimLight);
-    }
-
-    _initGrid() {
-        this.gridGroup = new THREE.Group();
-        const gridMaterial = new THREE.LineBasicMaterial({
-            color: GRID_COLOR,
-            transparent: true,
-            opacity: 0.25
-        });
-
-        const halfSize = GRID_SIZE / 2;
-        const step = GRID_SIZE / GRID_DIVISIONS;
-        const gridGeometry = new THREE.BufferGeometry();
-        const vertices = [];
-
-        for (let i = -halfSize; i <= halfSize; i += step) {
-            vertices.push(i, 0, -halfSize, i, 0, halfSize);
-            vertices.push(-halfSize, 0, i, halfSize, 0, i);
-        }
-
-        gridGeometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        const gridLines = new THREE.LineSegments(gridGeometry, gridMaterial);
-        this.gridGroup.add(gridLines);
-
-        const axesMaterial = new THREE.LineBasicMaterial({
-            color: GRID_COLOR,
-            transparent: true,
-            opacity: 0.55
-        });
-        const axesGeometry = new THREE.BufferGeometry();
-        axesGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
-            -halfSize, 0, 0, halfSize, 0, 0,
-            0, 0, -halfSize, 0, 0, halfSize
-        ], 3));
-        const axesLines = new THREE.LineSegments(axesGeometry, axesMaterial);
-        this.gridGroup.add(axesLines);
-
-        const groundGeometry = new THREE.PlaneGeometry(GRID_SIZE * 1.5, GRID_SIZE * 1.5);
-        const groundMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            metalness: 0.05,
-            roughness: 0.95,
-            transparent: true,
-            opacity: 0.8,
-        });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -0.1;
-        ground.receiveShadow = true;
-        this.gridGroup.add(ground);
-
-        this.scene.add(this.gridGroup);
     }
 
     _initRaycaster() {
