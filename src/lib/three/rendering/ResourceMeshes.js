@@ -261,22 +261,8 @@ export class ResourceMeshFactory {
     }
 
     updateStatus(group, status) {
-        const nodeId = group.userData.resourceId || '?';
         const isActive = String(status).toLowerCase() === 'active';
         const statusColor = getStatusColor(status);
-        const caller = new Error().stack.split('\n').slice(2, 5).map(s => s.trim()).join(' ← ');
-
-        // Pre-change snapshot
-        let preEmissive = null;
-        group.traverse((child) => {
-            if (child.isMesh && !child.userData.isLabel && child.material?.emissive) {
-                preEmissive = {
-                    hex: child.material.emissive.getHex(),
-                    intensity: child.material.emissiveIntensity
-                };
-            }
-        });
-        console.log(`[updateStatus] ${nodeId} → ${status} | PRE: emissive=#${preEmissive?.hex?.toString(16)} intensity=${preEmissive?.intensity?.toFixed(2)} scale=${group.scale.x.toFixed(2)} isScaled=${group.userData.isScaled} | CALLER: ${caller}`);
 
         // Reuse existing PointLight
         let light = group.getObjectByName('activePointLight');
@@ -293,27 +279,13 @@ export class ResourceMeshFactory {
             group.remove(light);
         }
 
-        let meshCount = 0;
         group.traverse((child) => {
             if (!child.material) return;
             if (child.isMesh && !child.userData.isLabel && child.material.emissive) {
-                meshCount++;
                 child.material.emissive.set(statusColor);
                 child.material.emissiveIntensity = isActive ? 0.95 : 0.14;
             }
         });
-
-        // Post-change snapshot
-        let postEmissive = null;
-        group.traverse((child) => {
-            if (child.isMesh && !child.userData.isLabel && child.material?.emissive) {
-                postEmissive = {
-                    hex: child.material.emissive.getHex(),
-                    intensity: child.material.emissiveIntensity
-                };
-            }
-        });
-        console.log(`[updateStatus] ${nodeId} DONE | POST: emissive=#${postEmissive?.hex?.toString(16)} intensity=${postEmissive?.intensity?.toFixed(2)} meshes=${meshCount} | scale→${group.scale.x.toFixed(2)} isScaled=${group.userData.isScaled}`);
 
         // Scale on active
         if (isActive) {

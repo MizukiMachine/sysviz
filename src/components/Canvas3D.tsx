@@ -1,23 +1,13 @@
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
 import { SubgraphRenderer } from '@/lib/three/rendering/SubgraphRenderer.js';
-import * as THREE from 'three';
+import type { ViewConfig } from '@/types/visualization';
 
 export interface Canvas3DHandle {
   renderer: ClusterRenderer | null;
   subgraphRenderer: SubgraphRenderer | null;
   loadView: (view: ViewConfig) => void;
   clearScene: () => void;
-}
-
-export interface ViewConfig {
-  nodes: any[];
-  connections: any[];
-  timeline: any;
-  buildRoutes: (meshes: Map<string, THREE.Group>) => any[];
-  camera: { position: number[]; target: number[] } | null;
-  subgraphs?: Map<string, any>;
-  nodeSubgraphs?: Map<string, string>;
 }
 
 export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {

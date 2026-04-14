@@ -1,19 +1,16 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
-import { Canvas3D, type Canvas3DHandle, type ViewConfig } from './components/Canvas3D';
+import { Canvas3D, type Canvas3DHandle } from './components/Canvas3D';
 import { PlaybackControls } from './components/PlaybackControls';
 import { SystemSelector } from './components/SystemSelector';
 import { CaptionBar } from './components/CaptionBar';
 import { ChatPanel } from './components/ChatPanel';
 import { usePlayback } from './hooks/usePlayback';
 import { useChat } from './hooks/useChat';
-import { MermaidParser } from './lib/three/parser/MermaidParser.js';
+import { useVisualizationController } from './hooks/useVisualizationController';
 
 export default function App() {
   const canvasRef = useRef<Canvas3DHandle>(null);
-  const [selectedView, setSelectedView] = useState('mermaid-data-flow');
-  const [disabledOptions, setDisabledOptions] = useState<Set<string>>(new Set());
-  const [mermaidView, setMermaidView] = useState<any>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const {
     info: playbackInfo,
@@ -24,87 +21,11 @@ export default function App() {
     prev,
   } = usePlayback();
   const chat = useChat();
-  const initializedRef = useRef(false);
-  const loadViewRef = useRef<(viewName: string) => void>(() => {});
-
-  // Parse Mermaid file on mount (with cancellation guard)
-  useEffect(() => {
-    let cancelled = false;
-    const mermaidParser = new MermaidParser();
-    mermaidParser
-      .parse('/data/03_data_flow.mmd')
-      .then((data: any) => {
-        if (!cancelled) setMermaidView(data);
-      })
-      .catch((e: any) => {
-        if (!cancelled) {
-          console.warn('Mermaid parse failed:', e);
-          setDisabledOptions(new Set(['mermaid-data-flow']));
-        }
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Stable loadView function using ref
-  loadViewRef.current = (viewName: string) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !canvas.renderer) return;
-
-    stop();
-
-    if (viewName === 'mermaid-data-flow') {
-      if (!mermaidView) return;
-      const viewConfig: ViewConfig = {
-        nodes: mermaidView.nodes,
-        connections: mermaidView.connections,
-        timeline: mermaidView.timeline,
-        buildRoutes: mermaidView.buildRoutes,
-        camera: mermaidView.camera,
-        subgraphs: mermaidView.subgraphs,
-        nodeSubgraphs: mermaidView.nodeSubgraphs ?? new Map(),
-      };
-      canvas.loadView(viewConfig);
-      initEngine(canvas.renderer, mermaidView.timeline);
-      return;
-    }
-  };
-
-  // Initial load — poll for canvas readiness instead of fixed timer
-  useEffect(() => {
-    if (initializedRef.current) return;
-    if (selectedView === 'mermaid-data-flow' && !mermaidView) return;
-
-    let tries = 0;
-    const poll = () => {
-      if (canvasRef.current?.renderer) {
-        initializedRef.current = true;
-        loadViewRef.current(selectedView);
-        return;
-      }
-      tries++;
-      if (tries < 20) {
-        setTimeout(poll, 50);
-      } else {
-        // Fallback: force load anyway
-        initializedRef.current = true;
-        loadViewRef.current(selectedView);
-      }
-    };
-    const timer = setTimeout(poll, 100);
-    return () => clearTimeout(timer);
-  }, [selectedView, mermaidView]);
-
-  // Re-load when view changes (after initial)
-  useEffect(() => {
-    if (!initializedRef.current) return;
-    loadViewRef.current(selectedView);
-  }, [selectedView]);
-
-  const handleViewChange = useCallback((viewName: string) => {
-    initializedRef.current = true;
-    stop();
-    setSelectedView(viewName);
-  }, [stop]);
+  const { selectedView, disabledOptions, handleViewChange } = useVisualizationController({
+    canvasRef,
+    initEngine,
+    stop,
+  });
 
   return (
     <div className="relative w-full h-full overflow-hidden">

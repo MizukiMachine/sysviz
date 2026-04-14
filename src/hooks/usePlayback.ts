@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { PlaybackEngine } from '@/lib/three/engine/PlaybackEngine.js';
 import type { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
 import * as THREE from 'three';
+import type { ViewConfig } from '@/types/visualization';
 
 /** Camera offset relative to the active node during playback */
 const PLAYBACK_CAMERA_OFFSET = { y: 6, z: 9 } as const;
@@ -30,23 +31,10 @@ export function usePlayback() {
     activeNodeId: null,
   });
 
-  const initEngine = useCallback((renderer: ClusterRenderer, timeline: any) => {
+  const initEngine = useCallback((renderer: ClusterRenderer, timeline: ViewConfig['timeline']) => {
     const engine = new PlaybackEngine(timeline, {
       onResourceState(resourceId: string, status: string) {
-        console.log(`[usePlayback.onResourceState] ${resourceId} → ${status} | lockDrag=${renderer.lockDrag}`);
         renderer.setResourceStatus(resourceId, status);
-        // Immediately verify after call
-        const group = renderer.resourceMeshes.get(resourceId);
-        if (group) {
-          let eHex = '?', eInt = '?';
-          group.traverse(child => {
-            if ((child as any).isMesh && !(child as any).userData.isLabel && (child as any).material?.emissive) {
-              eHex = '#' + (child as any).material.emissive.getHex().toString(16).padStart(6, '0');
-              eInt = (child as any).material.emissiveIntensity.toFixed(2);
-            }
-          });
-          console.log(`[usePlayback.onResourceState] VERIFY ${resourceId} post-set: emissive=${eHex}/${eInt} scale=${group.scale.x.toFixed(2)} isScaled=${group.userData.isScaled}`);
-        }
       },
       onRouteState(routeId: string, active: boolean) {
         renderer.setTrafficRouteActive(routeId, active);
@@ -57,23 +45,8 @@ export function usePlayback() {
       },
       onReset() {
         const allIds = [...renderer.resourceMeshes.keys()];
-        console.log(`[usePlayback.onReset] Resetting ${allIds.length} nodes to idle: [${allIds.join(', ')}]`);
         for (const id of allIds) {
           renderer.setResourceStatus(id, 'idle');
-        }
-        // Verify ALL nodes are idle after reset
-        for (const id of allIds) {
-          const group = renderer.resourceMeshes.get(id);
-          if (group) {
-            let eHex = '?', eInt = '?';
-            group.traverse(child => {
-              if ((child as any).isMesh && !(child as any).userData.isLabel && (child as any).material?.emissive) {
-                eHex = '#' + (child as any).material.emissive.getHex().toString(16).padStart(6, '0');
-                eInt = (child as any).material.emissiveIntensity.toFixed(2);
-              }
-            });
-            console.log(`[usePlayback.onReset] VERIFY ${id}: emissive=${eHex}/${eInt} scale=${group.scale.x.toFixed(2)} isScaled=${group.userData.isScaled}`);
-          }
         }
         renderer.clearTrafficParticles();
         for (const id of [...renderer.particleTraffic.routes.keys()]) {
@@ -84,7 +57,6 @@ export function usePlayback() {
         }
       },
       onStateChange(state: string) {
-        console.log(`[usePlayback.onStateChange] ${state} → lockDrag=${state === 'playing'}`);
         renderer.lockDrag = state === 'playing';
         setInfo((prev) => ({ ...prev, state: state as PlaybackState }));
       },
@@ -96,7 +68,6 @@ export function usePlayback() {
           currentCaption: caption || '',
           activeNodeId: nodeId,
         }));
-        // Camera flies to the active node only on step change (not on loop resets)
         const mesh = renderer.resourceMeshes.get(nodeId);
         if (mesh) {
           let targetPos = mesh.position.clone();

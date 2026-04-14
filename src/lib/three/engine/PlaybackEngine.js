@@ -68,7 +68,6 @@ export class PlaybackEngine {
         this.currentStep = stepIndex;
         const step = this.steps[stepIndex];
         const nextStep = stepIndex < this.steps.length - 1 ? this.steps[stepIndex + 1] : null;
-        console.log(`[_startStepLoop] stepIndex=${stepIndex} nodeId=${step.nodeId} nextNodeId=${nextStep?.nodeId ?? 'none'} stepStart=${step.time.toFixed(1)} currentStep=${this.currentStep}`);
         const nextStepTime = stepIndex < this.steps.length - 1
             ? this.steps[stepIndex + 1].time
             : this.duration;
@@ -80,20 +79,14 @@ export class PlaybackEngine {
         // Set state to playing FIRST so lockDrag is true before any visual changes
         this._setState('playing');
 
-        console.log(`[_startStepLoop] → calling onReset()...`);
         // 1. Reset all resources + clear routes/particles
         if (this.onReset) this.onReset();
-        console.log(`[_startStepLoop] ← onReset() done. Now setting active states...`);
 
         // 2. Set current + next nodes active so the active route's endpoints are both highlighted
         if (this.onResourceState) {
-            console.log(`[_startStepLoop] → onResourceState(${step.nodeId}, 'active')`);
             this.onResourceState(step.nodeId, 'active');
-            console.log(`[_startStepLoop] ← done. isScaled current node should be true now.`);
             if (nextStep) {
-                console.log(`[_startStepLoop] → onResourceState(${nextStep.nodeId}, 'active')`);
                 this.onResourceState(nextStep.nodeId, 'active');
-                console.log(`[_startStepLoop] ← done. isScaled next node should be true now.`);
             }
         }
 
@@ -114,7 +107,6 @@ export class PlaybackEngine {
                 : null;
             this.onStepChange(step.nodeId, nextNodeId, step.caption, stepIndex, this.steps.length);
         }
-        console.log(`[_startStepLoop] COMPLETE. currentStep=${this.currentStep} stepLoopMode=${this.stepLoopMode}`);
     }
 
     update(delta) {
@@ -138,8 +130,6 @@ export class PlaybackEngine {
     _loopReset() {
         const step = this.steps[this.currentStep];
         if (!step) return;
-        const nextStep = this.currentStep < this.steps.length - 1 ? this.steps[this.currentStep + 1] : null;
-        console.log(`[_loopReset] currentStep=${this.currentStep} nodeId=${step.nodeId} nextNodeId=${nextStep?.nodeId ?? 'none'}`);
 
         // Restore caption
         if (this.onCaption) {
@@ -150,7 +140,6 @@ export class PlaybackEngine {
         this.elapsed = this.stepStart;
         this.nextKeyframeIndex = this.keyframes.findIndex(f => f.time > this.stepStart);
         if (this.nextKeyframeIndex === -1) this.nextKeyframeIndex = this.keyframes.length;
-        console.log(`[_loopReset] COMPLETE.`);
     }
 
     _drainKeyframesAtCurrentTime() {

@@ -1,4 +1,4 @@
-declare module '@/lib/three/rendering/ClusterRenderer' {
+declare module '@/lib/three/rendering/ClusterRenderer.js' {
   export class ClusterRenderer {
     constructor(canvas: HTMLCanvasElement);
     scene: any;
@@ -26,7 +26,7 @@ declare module '@/lib/three/rendering/ClusterRenderer' {
   }
 }
 
-declare module '@/lib/three/rendering/SubgraphRenderer' {
+declare module '@/lib/three/rendering/SubgraphRenderer.js' {
   export class SubgraphRenderer {
     constructor(scene: any);
     render(subgraphs: any, nodeSubgraphs: any, meshes: any): void;
@@ -35,7 +35,7 @@ declare module '@/lib/three/rendering/SubgraphRenderer' {
   }
 }
 
-declare module '@/lib/three/engine/PlaybackEngine' {
+declare module '@/lib/three/engine/PlaybackEngine.js' {
   export class PlaybackEngine {
     state: string;
     elapsed: number;
@@ -50,9 +50,11 @@ declare module '@/lib/three/engine/PlaybackEngine' {
   }
 }
 
-declare module '@/lib/three/parser/MermaidParser' {
+declare module '@/lib/three/parser/MermaidParser.js' {
+  type ViewConfig = import('@/types/visualization').ViewConfig;
+
   export class MermaidParser {
-    parse(url: string): Promise<any>;
-    parseText(text: string): any;
+    parse(url: string): Promise<ViewConfig>;
+    parseText(text: string): ViewConfig;
   }
 }

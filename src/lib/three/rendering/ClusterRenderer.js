@@ -303,12 +303,8 @@ export class ClusterRenderer {
     _applyMeshEffect(group, effect) {
         // Never override nodes that are in active playback state
         if (effect === 'default' && group.userData.isScaled) {
-            console.log(`[_applyMeshEffect] SKIP ${group.userData.resourceId} effect=${effect} isScaled=${group.userData.isScaled} (guard blocked)`);
             return;
         }
-
-        const caller = new Error().stack.split('\n').slice(2, 4).map(s => s.trim()).join(' ← ');
-        console.log(`[_applyMeshEffect] ${group.userData.resourceId} effect=${effect} lockDrag=${this.lockDrag} isScaled=${group.userData.isScaled} selected=${this.selectedResource} hovered=${this.hoveredResource} | CALLER: ${caller}`);
 
         group.traverse((child) => {
             if (!child.isMesh || child.userData.isLabel) return;
@@ -489,22 +485,6 @@ export class ClusterRenderer {
         }
     }
 
-    // Dump material state of all nodes (for debugging)
-    _dumpMaterialSnapshot(label) {
-        const states = [];
-        for (const [id, group] of this.resourceMeshes) {
-            let emissiveHex = '?', emissiveInt = '?';
-            group.traverse(child => {
-                if (child.isMesh && !child.userData.isLabel && child.material?.emissive) {
-                    emissiveHex = '#' + child.material.emissive.getHex().toString(16).padStart(6, '0');
-                    emissiveInt = child.material.emissiveIntensity.toFixed(2);
-                }
-            });
-            states.push(`${id}[emis=${emissiveHex}/${emissiveInt} scale=${group.scale.x.toFixed(2)} isScaled=${group.userData.isScaled}]`);
-        }
-        console.log(`[SNAPSHOT:${label}] ${states.join(' | ')}`);
-    }
-
     _animate() {
         if (!this.running) return;
         this.frameId = requestAnimationFrame(() => this._animate());
@@ -513,15 +493,9 @@ export class ClusterRenderer {
         const delta = (now - this.lastFrameTime) / 1000;
         this.lastFrameTime = now;
 
-        // SNAPSHOT 1: Before onAnimate (engine.update)
-        if (this.lockDrag) this._dumpMaterialSnapshot('1-BEFORE-ONANIMATE');
-
         if (this.onAnimate) {
             this.onAnimate(delta);
         }
-
-        // SNAPSHOT 2: After onAnimate (engine.update may have called _loopReset)
-        if (this.lockDrag) this._dumpMaterialSnapshot('2-AFTER-ONANIMATE');
 
         this._updateCameraTargetAnimation(now);
         this.controls.update();
@@ -530,33 +504,11 @@ export class ClusterRenderer {
             this._performPick(false);
         }
 
-        // SNAPSHOT 3: After _performPick
-        if (this.lockDrag) this._dumpMaterialSnapshot('3-AFTER-PICK');
-
         this.connectionLines.update(delta);
-
-        // SNAPSHOT 4: After connectionLines.update
-        if (this.lockDrag) this._dumpMaterialSnapshot('4-AFTER-CONNLINES');
 
         this.particleTraffic.update(delta);
 
-        // SNAPSHOT 5: After particleTraffic.update
-        if (this.lockDrag) this._dumpMaterialSnapshot('5-AFTER-PARTICLES');
-
         this._animateResources(delta);
-
-        // SNAPSHOT 6: After _animateResources — FINAL pre-render state
-        if (this.lockDrag) {
-            for (const [id, group] of this.resourceMeshes) {
-                if (group.userData.isScaled) {
-                    group.traverse(child => {
-                        if (child.isMesh && !child.userData.isLabel && child.material?.emissive) {
-                            console.log(`[PRE-RENDER-FINAL] ${id} emissive=#${child.material.emissive.getHex().toString(16)} intensity=${child.material.emissiveIntensity.toFixed(2)} scale=${group.scale.x.toFixed(2)}`);
-                        }
-                    });
-                }
-            }
-        }
 
         this.renderer.render(this.scene, this.camera);
     }
