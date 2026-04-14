@@ -110,8 +110,8 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
         renderer.addTrafficRoute(route);
       }
 
-      if (view.subgraphs && view.subgraphs.size > 0) {
-        sg.render(view.subgraphs, view.nodeSubgraphs ?? new Map(), renderer.resourceMeshes);
+      if (view.subgraphs.size > 0) {
+        sg.render(view.subgraphs, view.nodeSubgraphs, renderer.resourceMeshes);
       }
 
       if (view.camera) {

@@ -4,11 +4,13 @@ import type {
   ViewConfig,
   VisualizationCamera,
   VisualizationConnection,
+  VisualizationConnectionType,
   VisualizationNode,
   VisualizationRoute,
   VisualizationSubgraph,
   VisualizationTimeline,
   VisualizationTimelineKeyframe,
+  VisualizationTrafficType,
 } from '@/types/visualization';
 
 const MERMAID_SHAPE_3D = {
@@ -73,8 +75,6 @@ type MermaidDirection = 'LR' | 'TB' | 'BT' | 'RL';
 type MermaidShapeKey = keyof typeof MERMAID_SHAPE_3D;
 type Node3DShape = 'default' | 'sphere' | 'cylinder' | 'diamond' | 'torus';
 type ConnectionLineStyle = keyof typeof LINE_STYLE_TYPE_MAP;
-type ConnectionType = 'network' | 'sync' | 'async' | 'signal' | 'storage' | 'config';
-
 interface MermaidNode extends VisualizationNode {
   id: string;
   name: string;
@@ -95,7 +95,7 @@ interface MermaidConnection extends VisualizationConnection {
   id: string;
   sourceId: string;
   targetId: string;
-  type: ConnectionType;
+  type: VisualizationConnectionType;
   trafficVolume: number;
   _label: string | null;
 }
@@ -107,7 +107,7 @@ interface MermaidRoute extends VisualizationRoute {
   sourcePos: THREE.Vector3;
   targetPos: THREE.Vector3;
   payload: string;
-  trafficType: string;
+  trafficType: VisualizationTrafficType;
   requestRate: number;
 }
 
@@ -135,22 +135,6 @@ interface TokenizedMermaid {
   nodeSubgraphs: Map<string, string>;
 }
 
-interface ResourceTimelineKeyframe extends VisualizationTimelineKeyframe {
-  time: number;
-  type: 'resource';
-  id: string;
-  status: 'active' | 'complete';
-  caption?: string;
-}
-
-interface RouteTimelineKeyframe extends VisualizationTimelineKeyframe {
-  time: number;
-  type: 'route';
-  id: string;
-  active: boolean;
-}
-
-type MermaidTimelineKeyframe = ResourceTimelineKeyframe | RouteTimelineKeyframe;
 type BuildRoutesFn = ViewConfig['buildRoutes'];
 
 function hexToHSL(hex: string): { h: number; s: number; l: number } {
@@ -466,7 +450,7 @@ export class MermaidParser {
   _buildConnections(tokens: TokenizedMermaid): MermaidConnection[] {
     return tokens.rawConnections.map((rc) => {
       const ls = LINE_STYLE_TYPE_MAP[rc.lineStyle] || LINE_STYLE_TYPE_MAP['-->'];
-      let type: ConnectionType = ls.type as ConnectionType;
+      let type: VisualizationConnectionType = ls.type;
       let trafficVolume = ls.trafficVolume;
 
       if (rc.label) {
@@ -620,7 +604,7 @@ export class MermaidParser {
       outMap.get(connection.sourceId)?.push(connection);
     }
 
-    const keyframes: MermaidTimelineKeyframe[] = [];
+    const keyframes: VisualizationTimelineKeyframe[] = [];
     const activeOrder: Array<{ time: number; id: string }> = [];
     let time = 0;
 
@@ -675,7 +659,7 @@ export class MermaidParser {
         const tgtMesh = resourceMeshes.get(conn.targetId);
         if (!srcMesh || !tgtMesh) return [];
 
-        let trafficType = 'default';
+        let trafficType: VisualizationTrafficType = 'default';
         if (conn.type === 'signal') trafficType = 'error';
         else if (conn.id === lastConnId) trafficType = 'healthy';
 

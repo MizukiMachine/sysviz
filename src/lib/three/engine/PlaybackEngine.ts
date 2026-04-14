@@ -1,22 +1,11 @@
-import type { VisualizationTimeline, VisualizationTimelineKeyframe } from '@/types/visualization';
+import type {
+  VisualizationResourceStatus,
+  VisualizationTimeline,
+  VisualizationTimelineKeyframe,
+} from '@/types/visualization';
 
-type PlaybackEngineState = 'idle' | 'playing';
-
-interface ResourceKeyframe extends VisualizationTimelineKeyframe {
-  type: 'resource';
-  id: string;
-  status: string;
-  caption?: string;
-}
-
-interface RouteKeyframe extends VisualizationTimelineKeyframe {
-  type: 'route';
-  id: string;
-  active: boolean;
-  caption?: string;
-}
-
-type PlaybackKeyframe = ResourceKeyframe | RouteKeyframe;
+export type PlaybackEngineState = 'idle' | 'playing';
+export type PlaybackKeyframe = VisualizationTimelineKeyframe;
 
 interface PlaybackStep {
   time: number;
@@ -24,29 +13,38 @@ interface PlaybackStep {
   caption?: string;
 }
 
-interface PlaybackCallbacks {
-  onStateChange?: ((state: PlaybackEngineState, info: { elapsed: number; duration: number }) => void) | null;
-  onResourceState?: ((resourceId: string, status: string) => void) | null;
+export interface PlaybackStateInfo {
+  elapsed: number;
+  duration: number;
+}
+
+export interface PlaybackStepChange {
+  nodeId: string;
+  nextNodeId: string | null;
+  caption?: string;
+  stepIndex: number;
+  totalSteps: number;
+}
+
+export interface PlaybackEngineCallbacks {
+  onStateChange?: ((state: PlaybackEngineState, info: PlaybackStateInfo) => void) | null;
+  onResourceState?: ((resourceId: string, status: VisualizationResourceStatus) => void) | null;
   onRouteState?: ((routeId: string, active: boolean) => void) | null;
   onCaption?: ((caption: string) => void) | null;
   onReset?: (() => void) | null;
-  onStepChange?: ((nodeId: string, nextNodeId: string | null, caption: string | undefined, stepIndex: number, totalSteps: number) => void) | null;
+  onStepChange?: ((change: PlaybackStepChange) => void) | null;
 }
-
-type PlaybackTimeline = VisualizationTimeline & {
-  keyframes: PlaybackKeyframe[];
-};
 
 export class PlaybackEngine {
   state: PlaybackEngineState;
   elapsed: number;
   duration: number;
-  onStateChange: PlaybackCallbacks['onStateChange'];
-  onResourceState: PlaybackCallbacks['onResourceState'];
-  onRouteState: PlaybackCallbacks['onRouteState'];
-  onCaption: PlaybackCallbacks['onCaption'];
-  onReset: PlaybackCallbacks['onReset'];
-  onStepChange: PlaybackCallbacks['onStepChange'];
+  onStateChange: PlaybackEngineCallbacks['onStateChange'];
+  onResourceState: PlaybackEngineCallbacks['onResourceState'];
+  onRouteState: PlaybackEngineCallbacks['onRouteState'];
+  onCaption: PlaybackEngineCallbacks['onCaption'];
+  onReset: PlaybackEngineCallbacks['onReset'];
+  onStepChange: PlaybackEngineCallbacks['onStepChange'];
   keyframes: PlaybackKeyframe[];
   nextKeyframeIndex: number;
   steps: PlaybackStep[];
@@ -64,7 +62,7 @@ export class PlaybackEngine {
       onCaption = null,
       onReset = null,
       onStepChange = null,
-    }: PlaybackCallbacks = {},
+    }: PlaybackEngineCallbacks = {},
   ) {
     this.state = 'idle';
     this.elapsed = 0;
@@ -75,7 +73,7 @@ export class PlaybackEngine {
     this.onCaption = onCaption;
     this.onReset = onReset;
     this.onStepChange = onStepChange;
-    this.keyframes = (timeline as PlaybackTimeline).keyframes.map((frame) => ({ ...frame })) as PlaybackKeyframe[];
+    this.keyframes = timeline.keyframes.map((frame) => ({ ...frame }));
     this.nextKeyframeIndex = 0;
     this.steps = [];
     this.currentStep = -1;
@@ -154,7 +152,13 @@ export class PlaybackEngine {
 
     if (this.onStepChange) {
       const nextNodeId = stepIndex < this.steps.length - 1 ? this.steps[stepIndex + 1].nodeId : null;
-      this.onStepChange(step.nodeId, nextNodeId, step.caption, stepIndex, this.steps.length);
+      this.onStepChange({
+        nodeId: step.nodeId,
+        nextNodeId,
+        caption: step.caption,
+        stepIndex,
+        totalSteps: this.steps.length,
+      });
     }
   }
 
