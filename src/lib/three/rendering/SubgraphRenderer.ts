@@ -1,17 +1,14 @@
 import * as THREE from 'three';
 import type { VisualizationSubgraph } from '@/types/visualization';
 
-const BOX_COLOR = 0xf0f4f8;
-const BOX_OPACITY = 0.35;
-const EDGE_COLOR = 0x94a3b8;
-const EDGE_OPACITY = 0.7;
+const FLOOR_COLOR = 0xf0f4f8;
+const FLOOR_OPACITY = 0.3;
+const BORDER_COLOR = 0x94a3b8;
+const BORDER_OPACITY = 0.5;
 const PADDING = 2.0;
-const BOX_HEIGHT = 2.4;
 
 interface SubgraphEntry {
   group: THREE.Group;
-  box: THREE.Mesh;
-  edges: THREE.LineSegments;
   floorPlane: THREE.Mesh;
 }
 
@@ -106,27 +103,31 @@ export class SubgraphRenderer {
 
       const sgGroup = new THREE.Group();
 
-      const boxGeo = new THREE.BoxGeometry(width, BOX_HEIGHT, depth);
-      const boxMat = new THREE.MeshStandardMaterial({
-        color: BOX_COLOR,
+      // Floor plane (底面のみ)
+      const floorGeo = new THREE.PlaneGeometry(width, depth);
+      const floorMat = new THREE.MeshBasicMaterial({
+        color: FLOOR_COLOR,
         transparent: true,
-        opacity: BOX_OPACITY,
+        opacity: FLOOR_OPACITY,
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      const box = new THREE.Mesh(boxGeo, boxMat);
-      box.position.set(cx, BOX_HEIGHT / 2, cz);
-      sgGroup.add(box);
+      const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+      floorMesh.rotation.x = -Math.PI / 2;
+      floorMesh.position.set(cx, 0.01, cz);
+      sgGroup.add(floorMesh);
 
-      const edgesGeo = new THREE.EdgesGeometry(boxGeo);
-      const edgesMat = new THREE.LineBasicMaterial({
-        color: EDGE_COLOR,
+      // Border outline (底面の枠線)
+      const borderGeo = new THREE.EdgesGeometry(floorGeo);
+      const borderMat = new THREE.LineBasicMaterial({
+        color: BORDER_COLOR,
         transparent: true,
-        opacity: EDGE_OPACITY,
+        opacity: BORDER_OPACITY,
       });
-      const edges = new THREE.LineSegments(edgesGeo, edgesMat);
-      edges.position.set(cx, BOX_HEIGHT / 2, cz);
-      sgGroup.add(edges);
+      const border = new THREE.LineSegments(borderGeo, borderMat);
+      border.rotation.x = -Math.PI / 2;
+      border.position.set(cx, 0.01, cz);
+      sgGroup.add(border);
 
       const title = sg.title || sg.id;
       const floorTex = createFloorLabelTexture(title);
@@ -143,14 +144,14 @@ export class SubgraphRenderer {
         planeD = planeW / texAspect;
       }
 
-      const floorGeo = new THREE.PlaneGeometry(planeW, planeD);
-      const floorMat = new THREE.MeshBasicMaterial({
+      const labelGeo = new THREE.PlaneGeometry(planeW, planeD);
+      const labelMat = new THREE.MeshBasicMaterial({
         map: floorTex,
         transparent: true,
         depthWrite: false,
         side: THREE.DoubleSide,
       });
-      const floorPlane = new THREE.Mesh(floorGeo, floorMat);
+      const floorPlane = new THREE.Mesh(labelGeo, labelMat);
       floorPlane.rotation.x = -Math.PI / 2;
       floorPlane.position.set(cx, 0.02, cz + depth * 0.25);
       floorPlane.userData.isLabel = true;
@@ -158,7 +159,7 @@ export class SubgraphRenderer {
       sgGroup.add(floorPlane);
 
       this.group.add(sgGroup);
-      this.subgraphs.set(sg.id, { group: sgGroup, box, edges, floorPlane });
+      this.subgraphs.set(sg.id, { group: sgGroup, floorPlane });
     }
   }
 

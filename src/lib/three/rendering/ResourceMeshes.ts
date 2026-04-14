@@ -3,7 +3,7 @@ import type { VisualizationNode, VisualizationResourceStatus } from '@/types/vis
 
 const STATUS_COLORS = {
   idle: 0x94a3b8,
-  active: 0x22c55e,
+  active: 0x94a3b8,
   complete: 0x3b82f6,
   error: 0xef4444,
   default: 0x94a3b8,
@@ -186,10 +186,7 @@ function addResourceElements(group: ResourceGroup, resource: VisualizationNode, 
   const userData = group.userData as MeshUserData;
   userData.baseY = idleY;
   userData.animate = resource.animate || ((time: number) => {
-    const light = group.getObjectByName('activePointLight') as THREE.PointLight | null;
-    if (light) {
-      light.intensity = 15 + Math.sin(time * 3) * 4;
-    }
+    void time;
   });
 }
 
@@ -280,22 +277,7 @@ export class ResourceMeshFactory {
   }
 
   updateStatus(group: ResourceGroup, status: VisualizationResourceStatus): void {
-    const isActive = String(status).toLowerCase() === 'active';
     const statusColor = getStatusColor(status);
-
-    let light = group.getObjectByName('activePointLight') as THREE.PointLight | null;
-    if (isActive) {
-      if (!light) {
-        light = new THREE.PointLight(statusColor, 15, 12);
-        light.position.set(0, 1.5, 0);
-        light.name = 'activePointLight';
-        group.add(light);
-      } else {
-        light.color.set(statusColor);
-      }
-    } else if (light) {
-      group.remove(light);
-    }
 
     group.traverse((child) => {
       const object = child as THREE.Object3D & {
@@ -311,17 +293,14 @@ export class ResourceMeshFactory {
       if (!material) return;
       if (object.isMesh && !object.userData.isLabel && material.emissive) {
         material.emissive.set(statusColor);
-        material.emissiveIntensity = isActive ? 0.95 : 0.14;
+        material.emissiveIntensity = 0.14;
       }
     });
 
-    if (isActive) {
-      group.scale.set(1.5, 1.5, 1.5);
-      (group.userData as MeshUserData).isScaled = true;
-    } else if ((group.userData as MeshUserData).isScaled) {
-      group.scale.set(1, 1, 1);
-      (group.userData as MeshUserData).isScaled = false;
-    }
+    // -- Active decoration extension point --
+    // Add/remove visual indicators for the active node here.
+    // Example: ring, glow, outline, particles above the node, etc.
+    // const isActive = String(status).toLowerCase() === 'active';
   }
 
   dispose(group: ResourceGroup | null | undefined): void {

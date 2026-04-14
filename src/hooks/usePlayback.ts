@@ -4,7 +4,7 @@ import type { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
 import type { ViewConfig } from '@/types/visualization';
 
 /** Camera offset relative to the active node during playback */
-const PLAYBACK_CAMERA_OFFSET = { y: 6, z: 9 } as const;
+const PLAYBACK_CAMERA_OFFSET = { y: 10, z: 15 } as const;
 
 export type PlaybackState = PlaybackEngineState | 'paused';
 
