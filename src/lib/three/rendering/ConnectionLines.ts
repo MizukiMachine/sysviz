@@ -35,17 +35,9 @@ const MAX_OPACITY = 0.7;
 
 type LineMaterial = THREE.LineBasicMaterial | THREE.LineDashedMaterial;
 
-interface ConnectionRecord extends VisualizationConnection {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  type?: string;
-  trafficVolume?: number;
-}
-
 interface ConnectionEntry {
   line: THREE.Line<THREE.BufferGeometry, LineMaterial>;
-  connection: ConnectionRecord;
+  connection: VisualizationConnection;
   curve: THREE.QuadraticBezierCurve3;
   labelSprite: THREE.Sprite | null;
   sourcePos: THREE.Vector3;
@@ -75,18 +67,16 @@ export class ConnectionLineManager {
     this.scene.add(this.lineGroup);
   }
 
-  _getBaseOpacity(connection: ConnectionRecord): number {
+  _getBaseOpacity(connection: VisualizationConnection): number {
     const trafficVolume = connection.trafficVolume || 1;
     return Math.min(MIN_OPACITY + trafficVolume * 0.05, MAX_OPACITY);
   }
 
   addConnection(connection: VisualizationConnection, resourceMeshes: Map<string, THREE.Group>): void {
-    const record = connection as ConnectionRecord;
-    if (!record.id || !record.sourceId || !record.targetId) return;
-    if (this.connections.has(record.id)) return;
+    if (this.connections.has(connection.id)) return;
 
-    const sourceGroup = resourceMeshes.get(record.sourceId);
-    const targetGroup = resourceMeshes.get(record.targetId);
+    const sourceGroup = resourceMeshes.get(connection.sourceId);
+    const targetGroup = resourceMeshes.get(connection.targetId);
     if (!sourceGroup || !targetGroup) return;
 
     const sourcePos = sourceGroup.position.clone();
@@ -100,9 +90,9 @@ export class ConnectionLineManager {
     const points = curve.getPoints(CURVE_SEGMENTS);
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
-    const relationColor = RELATIONSHIP_COLORS[record.type as keyof typeof RELATIONSHIP_COLORS] || RELATIONSHIP_COLORS.default;
-    const opacity = this._getBaseOpacity(record);
-    const dashConfig = DASH_CONFIG[record.type as keyof typeof DASH_CONFIG] ?? DASH_CONFIG.default;
+    const relationColor = RELATIONSHIP_COLORS[connection.type as keyof typeof RELATIONSHIP_COLORS] || RELATIONSHIP_COLORS.default;
+    const opacity = this._getBaseOpacity(connection);
+    const dashConfig = DASH_CONFIG[connection.type as keyof typeof DASH_CONFIG] ?? DASH_CONFIG.default;
 
     let material: LineMaterial;
     if (dashConfig === null) {
@@ -126,19 +116,19 @@ export class ConnectionLineManager {
     const line = new THREE.Line(geometry, material);
     line.computeLineDistances();
     const userData = line.userData as LineUserData;
-    userData.connectionId = record.id;
-    userData.sourceId = record.sourceId;
-    userData.targetId = record.targetId;
-    userData.type = record.type;
+    userData.connectionId = connection.id;
+    userData.sourceId = connection.sourceId;
+    userData.targetId = connection.targetId;
+    userData.type = connection.type;
     userData.flowOffset = 0;
-    userData.flowSpeed = (FLOW_SPEEDS[record.type as keyof typeof FLOW_SPEEDS] || FLOW_SPEEDS.default) * (0.5 + Math.random() * 0.5);
+    userData.flowSpeed = (FLOW_SPEEDS[connection.type as keyof typeof FLOW_SPEEDS] || FLOW_SPEEDS.default) * (0.5 + Math.random() * 0.5);
     userData.curve = curve;
 
     this.lineGroup.add(line);
 
-    this.connections.set(record.id, {
+    this.connections.set(connection.id, {
       line,
-      connection: record,
+      connection,
       curve,
       labelSprite: null,
       sourcePos: sourcePos.clone(),

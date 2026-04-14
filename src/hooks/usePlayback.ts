@@ -1,12 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
-import { PlaybackEngine } from '@/lib/three/engine/PlaybackEngine.js';
+import { PlaybackEngine, type PlaybackEngineState } from '@/lib/three/engine/PlaybackEngine.js';
 import type { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
 import type { ViewConfig } from '@/types/visualization';
 
 /** Camera offset relative to the active node during playback */
 const PLAYBACK_CAMERA_OFFSET = { y: 6, z: 9 } as const;
 
-export type PlaybackState = 'idle' | 'playing' | 'paused';
+export type PlaybackState = PlaybackEngineState | 'paused';
 
 export interface PlaybackInfo {
   state: PlaybackState;
@@ -55,11 +55,11 @@ export function usePlayback() {
           renderer.setConnectionActive(id, false);
         }
       },
-      onStateChange(state: string) {
+      onStateChange(state) {
         renderer.lockDrag = state === 'playing';
-        setInfo((prev) => ({ ...prev, state: state as PlaybackState }));
+        setInfo((prev) => ({ ...prev, state }));
       },
-      onStepChange(nodeId: string, _nextNodeId: string | null, caption: string | undefined, stepIndex: number, totalSteps: number) {
+      onStepChange({ nodeId, nextNodeId, caption, stepIndex, totalSteps }) {
         setInfo((prev) => ({
           ...prev,
           currentStep: stepIndex,
@@ -70,8 +70,8 @@ export function usePlayback() {
         const mesh = renderer.resourceMeshes.get(nodeId);
         if (mesh) {
           let targetPos = mesh.position.clone();
-          if (_nextNodeId) {
-            const nextMesh = renderer.resourceMeshes.get(_nextNodeId);
+          if (nextNodeId) {
+            const nextMesh = renderer.resourceMeshes.get(nextNodeId);
             if (nextMesh) {
               targetPos = mesh.position.clone().add(nextMesh.position).multiplyScalar(0.5);
             }

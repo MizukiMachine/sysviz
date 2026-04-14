@@ -15,30 +15,28 @@ export type VisualizationTrafficType = 'healthy' | 'error' | 'slow' | 'default' 
 
 export interface VisualizationNode {
   id: string;
-  name?: string;
-  type?: string;
-  shape?: VisualizationNodeShape;
-  status?: VisualizationResourceStatus;
-  color?: number;
-  x?: number;
-  y?: number;
-  z?: number;
+  name: string;
+  type: string;
+  shape: VisualizationNodeShape;
+  status: VisualizationResourceStatus;
+  color: number;
+  x: number;
+  y: number;
+  z: number;
   dataIn?: string;
   dataOut?: string;
-  floatOffset?: number;
-  glowOffset?: number;
+  floatOffset: number;
+  glowOffset: number;
   animate?: (time: number, delta?: number) => void;
-  [key: string]: unknown;
 }
 
 export interface VisualizationConnection {
   id: string;
-  sourceId?: string;
-  targetId?: string;
+  sourceId: string;
+  targetId: string;
   type?: VisualizationConnectionType;
   trafficVolume?: number;
   _label?: string | null;
-  [key: string]: unknown;
 }
 
 export interface VisualizationRoute {
@@ -51,18 +49,27 @@ export interface VisualizationRoute {
   trafficType?: VisualizationTrafficType;
   requestRate?: number;
   active?: boolean;
-  [key: string]: unknown;
 }
 
-export interface VisualizationTimelineKeyframe {
+export interface VisualizationResourceTimelineKeyframe {
   time: number;
-  type?: string;
-  id?: string;
-  status?: VisualizationResourceStatus;
-  active?: boolean;
+  type: 'resource';
+  id: string;
+  status: VisualizationResourceStatus;
   caption?: string;
-  [key: string]: unknown;
 }
+
+export interface VisualizationRouteTimelineKeyframe {
+  time: number;
+  type: 'route';
+  id: string;
+  active: boolean;
+  caption?: string;
+}
+
+export type VisualizationTimelineKeyframe =
+  | VisualizationResourceTimelineKeyframe
+  | VisualizationRouteTimelineKeyframe;
 
 export interface VisualizationTimeline {
   duration: number;
@@ -78,7 +85,6 @@ export interface VisualizationSubgraph {
   id: string;
   title: string;
   order?: number;
-  [key: string]: unknown;
 }
 
 export interface ViewConfig {
@@ -87,6 +93,6 @@ export interface ViewConfig {
   timeline: VisualizationTimeline;
   buildRoutes: (meshes: Map<string, THREE.Group>) => VisualizationRoute[];
   camera: VisualizationCamera | null;
-  subgraphs?: Map<string, VisualizationSubgraph>;
-  nodeSubgraphs?: Map<string, string>;
+  subgraphs: Map<string, VisualizationSubgraph>;
+  nodeSubgraphs: Map<string, string>;
 }
