@@ -1,6 +1,7 @@
 declare module 'dagre' {
   namespace graphlib {
     class Graph {
+      setGraph(label?: any): Graph;
       setDefaultEdgeLabel(label: any): Graph;
       setNode(node: string, label?: any): Graph;
       setEdge(source: string, target: string, label?: any): Graph;
@@ -29,6 +30,11 @@ declare module 'dagre' {
   export const graphlib: {
     Graph: new (options?: any) => graphlib.Graph;
   };
-}
 
-export default dagre;
+  const dagre: {
+    layout: typeof layout;
+    graphlib: typeof graphlib;
+  };
+
+  export default dagre;
+}
