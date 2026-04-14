@@ -1,23 +1,13 @@
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
-import { SubgraphRenderer } from '@/lib/three/rendering/SubgraphRenderer.js';
-import * as THREE from 'three';
+import type { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
+import type { SubgraphRenderer } from '@/lib/three/rendering/SubgraphRenderer.js';
+import type { ViewConfig } from '@/types/visualization';
 
 export interface Canvas3DHandle {
   renderer: ClusterRenderer | null;
   subgraphRenderer: SubgraphRenderer | null;
   loadView: (view: ViewConfig) => void;
   clearScene: () => void;
-}
-
-export interface ViewConfig {
-  nodes: any[];
-  connections: any[];
-  timeline: any;
-  buildRoutes: (meshes: Map<string, THREE.Group>) => any[];
-  camera: { position: number[]; target: number[] } | null;
-  subgraphs?: Map<string, any>;
-  nodeSubgraphs?: Map<string, string>;
 }
 
 export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
@@ -39,24 +29,37 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    let disposed = false;
+    let cleanup: (() => void) | undefined;
 
     // Ensure canvas has full viewport size before ClusterRenderer reads it
     canvas.style.width = '100vw';
     canvas.style.height = '100vh';
 
-    const renderer = new ClusterRenderer(canvas);
-    const subgraphRenderer = new SubgraphRenderer(renderer.scene);
-    rendererRef.current = renderer;
-    subgraphRef.current = subgraphRenderer;
+    void Promise.all([
+      import('@/lib/three/rendering/ClusterRenderer.js'),
+      import('@/lib/three/rendering/SubgraphRenderer.js'),
+    ]).then(([clusterModule, subgraphModule]) => {
+      if (disposed) return;
 
-    renderer.start();
+      const renderer = new clusterModule.ClusterRenderer(canvas);
+      const subgraphRenderer = new subgraphModule.SubgraphRenderer(renderer.scene);
+      rendererRef.current = renderer;
+      subgraphRef.current = subgraphRenderer;
+
+      renderer.start();
+      cleanup = () => {
+        renderer.stop();
+        renderer.dispose();
+        subgraphRenderer.dispose();
+        rendererRef.current = null;
+        subgraphRef.current = null;
+      };
+    });
 
     return () => {
-      renderer.stop();
-      renderer.dispose();
-      subgraphRenderer.dispose();
-      rendererRef.current = null;
-      subgraphRef.current = null;
+      disposed = true;
+      cleanup?.();
     };
   }, []);
 

@@ -1,18 +1,12 @@
 import type { PlaybackInfo } from '@/hooks/usePlayback';
+import { VIEW_LABELS } from '@/lib/views/viewRegistry';
 import { getPhaseDescriptions } from './PhaseDescriptions';
-
-const VIEW_LABELS: Record<string, string> = {
-  'flask-data-flow': 'Flask Data Flow',
-  'flask-sequence': 'Flask Sequence',
-  'flask-request-flow': 'Flask Simplified Flow',
-  'mermaid-data-flow': 'Flask Data Flow (from Mermaid)',
-};
 
 export function buildSystemPrompt(
   viewName: string,
   playbackInfo: PlaybackInfo,
 ): string {
-  const viewLabel = VIEW_LABELS[viewName] || viewName;
+  const viewLabel = VIEW_LABELS[viewName as keyof typeof VIEW_LABELS] || viewName;
   const phaseDescs = getPhaseDescriptions(viewName);
 
   const stepInfo =

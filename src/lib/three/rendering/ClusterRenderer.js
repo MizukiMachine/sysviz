@@ -301,6 +301,11 @@ export class ClusterRenderer {
     }
 
     _applyMeshEffect(group, effect) {
+        // Never override nodes that are in active playback state
+        if (effect === 'default' && group.userData.isScaled) {
+            return;
+        }
+
         group.traverse((child) => {
             if (!child.isMesh || child.userData.isLabel) return;
             const mat = child.material;
@@ -415,7 +420,10 @@ export class ClusterRenderer {
 
     setResourceStatus(resourceId, status) {
         const group = this.resourceMeshes.get(resourceId);
-        if (!group) return;
+        if (!group) {
+            console.warn(`[setResourceStatus] UNKNOWN resourceId=${resourceId} status=${status}`);
+            return;
+        }
         this.meshFactory.updateStatus(group, status);
     }
 
@@ -492,12 +500,14 @@ export class ClusterRenderer {
         this._updateCameraTargetAnimation(now);
         this.controls.update();
 
-        if (!this._didDrag) {
+        if (!this._didDrag && !this.lockDrag) {
             this._performPick(false);
         }
 
         this.connectionLines.update(delta);
+
         this.particleTraffic.update(delta);
+
         this._animateResources(delta);
 
         this.renderer.render(this.scene, this.camera);
@@ -537,26 +547,6 @@ export class ClusterRenderer {
         }
     }
 
-    focusResource(resourceId) {
-        const group = this.resourceMeshes.get(resourceId);
-        if (!group) return;
-
-        this.controls.target.copy(group.position);
-        this.controls.update();
-    }
-
-    setCameraTarget(position, duration = 800) {
-        if (!position) return;
-
-        const target = position.clone ? position.clone() : new THREE.Vector3(position.x, position.y, position.z);
-        this._cameraTargetAnimation = {
-            start: this.controls.target.clone(),
-            end: target,
-            startTime: performance.now(),
-            duration
-        };
-    }
-
     flyTo(targetPosition, cameraPosition, duration = 1000) {
         this._cameraTargetAnimation = {
             start: this.controls.target.clone(),
@@ -568,74 +558,11 @@ export class ClusterRenderer {
         };
     }
 
-    getScreenPosition(resourceId) {
-        const group = this.resourceMeshes.get(resourceId);
-        if (!group) return null;
-
-        const pos = group.position.clone();
-        pos.project(this.camera);
-
-        return {
-            x: (pos.x + 1) / 2 * this.canvas.clientWidth,
-            y: (-pos.y + 1) / 2 * this.canvas.clientHeight
-        };
-    }
-
     _raycastGround(ndc) {
         this.raycaster.setFromCamera(ndc, this.camera);
         const intersection = new THREE.Vector3();
         const hit = this.raycaster.ray.intersectPlane(this._groundPlane, intersection);
         return hit ? intersection : null;
-    }
-
-    screenToGround(screenX, screenY) {
-        const rect = this.canvas.getBoundingClientRect();
-        const ndc = new THREE.Vector2(
-            ((screenX - rect.left) / rect.width) * 2 - 1,
-            -((screenY - rect.top) / rect.height) * 2 + 1
-        );
-        const pos = this._raycastGround(ndc);
-        return pos ? { x: pos.x, y: 0, z: pos.z } : null;
-    }
-
-    animateToPositions(targets, duration = 800) {
-        const startTime = performance.now();
-        const startPositions = new Map();
-
-        for (const [uid, target] of targets) {
-            const group = this.resourceMeshes.get(uid);
-            if (group) {
-                startPositions.set(uid, {
-                    x: group.position.x,
-                    y: group.position.y,
-                    z: group.position.z,
-                });
-            }
-        }
-
-        const animate = () => {
-            const elapsed = performance.now() - startTime;
-            const t = Math.min(elapsed / duration, 1);
-            const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-
-            for (const [uid, target] of targets) {
-                const group = this.resourceMeshes.get(uid);
-                const start = startPositions.get(uid);
-                if (!group || !start) continue;
-
-                group.position.x = start.x + (target.x - start.x) * ease;
-                group.position.y = start.y + (target.y - start.y) * ease;
-                group.position.z = start.z + (target.z - start.z) * ease;
-            }
-
-            this.connectionLines.updatePositions(this.resourceMeshes);
-
-            if (t < 1) {
-                requestAnimationFrame(animate);
-            }
-        };
-
-        requestAnimationFrame(animate);
     }
 
     resetCamera() {

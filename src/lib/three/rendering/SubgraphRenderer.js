@@ -7,64 +7,37 @@ const EDGE_COLOR = 0x94a3b8;       // slate-400
 const EDGE_OPACITY = 0.7;
 const PADDING = 2.0;
 const BOX_HEIGHT = 2.4;
-const BANNER_BG = '#e2e8f0';       // slate-200 — visible but muted
-const BANNER_EDGE = '#94a3b8';     // slate-400 — matches box edges
 
-function createBannerLabel(text) {
+function createFloorLabelTexture(text) {
     const canvas = document.createElement('canvas');
-    const cW = 768;
-    const cH = 80;
+    const cW = 1024;
+    const cH = 512;
     canvas.width = cW;
     canvas.height = cH;
     const ctx = canvas.getContext('2d');
 
     ctx.clearRect(0, 0, cW, cH);
-    ctx.font = '600 28px "Inter", sans-serif';
-    const metrics = ctx.measureText(text);
-    const textW = Math.min(metrics.width + 40, cW - 20);
-    const boxH = 44;
-    const boxX = (cW - textW) / 2;
-    const boxY = (cH - boxH) / 2;
-    const r = 10;
 
-    // Banner background
-    ctx.fillStyle = BANNER_BG;
-    ctx.beginPath();
-    ctx.moveTo(boxX + r, boxY);
-    ctx.lineTo(boxX + textW - r, boxY);
-    ctx.quadraticCurveTo(boxX + textW, boxY, boxX + textW, boxY + r);
-    ctx.lineTo(boxX + textW, boxY + boxH - r);
-    ctx.quadraticCurveTo(boxX + textW, boxY + boxH, boxX + textW - r, boxY + boxH);
-    ctx.lineTo(boxX + r, boxY + boxH);
-    ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r);
-    ctx.lineTo(boxX, boxY + r);
-    ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
-    ctx.closePath();
-    ctx.fill();
-
-    // Banner border
-    ctx.strokeStyle = BANNER_EDGE;
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Text
-    ctx.fillStyle = '#0f172a';
+    // Label text
+    ctx.fillStyle = 'rgba(51, 65, 85, 0.85)'; // slate-700
+    ctx.font = '700 48px "Inter", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, cW / 2, cH / 2, cW - 40);
+    ctx.fillText(text, cW / 2, cH / 2, cW - 60);
+
+    // Subtle underline
+    const metrics = ctx.measureText(text);
+    const lineW = Math.min(metrics.width, cW - 60);
+    ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo((cW - lineW) / 2, cH / 2 + 32);
+    ctx.lineTo((cW + lineW) / 2, cH / 2 + 32);
+    ctx.stroke();
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.minFilter = THREE.LinearFilter;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        depthTest: false,
-        sizeAttenuation: true
-    }));
-    sprite.scale.set(3.6, 0.38, 1);
-    sprite.userData.isLabel = true;
-    sprite.renderOrder = 5;
-    return sprite;
+    return texture;
 }
 
 export class SubgraphRenderer {
@@ -122,7 +95,7 @@ export class SubgraphRenderer {
 
             const sgGroup = new THREE.Group();
 
-            // Semi-transparent box
+            // Semi-transparent box (single material)
             const boxGeo = new THREE.BoxGeometry(width, BOX_HEIGHT, depth);
             const boxMat = new THREE.MeshStandardMaterial({
                 color: BOX_COLOR,
@@ -146,14 +119,39 @@ export class SubgraphRenderer {
             edges.position.set(cx, BOX_HEIGHT / 2, cz);
             sgGroup.add(edges);
 
-            // Banner label — sits at the top edge, half overlapping the box
+            // Floor label — plane on the bottom of the box, facing up (+Y)
             const title = sg.title || sg.id;
-            const label = createBannerLabel(title);
-            label.position.set(cx, BOX_HEIGHT - 0.05, cz);
-            sgGroup.add(label);
+            const floorTex = createFloorLabelTexture(title);
+
+            // Use full box floor, maintain 2:1 aspect to prevent text stretch
+            // For single-node subgraphs, scale up for readability
+            const scaleFactor = members.length === 1 ? 1.8 : 1;
+            const texAspect = 2;
+            let planeW, planeD;
+            if ((width * scaleFactor) / (depth * scaleFactor) > texAspect) {
+                planeD = depth * scaleFactor;
+                planeW = planeD * texAspect;
+            } else {
+                planeW = width * scaleFactor;
+                planeD = planeW / texAspect;
+            }
+
+            const floorGeo = new THREE.PlaneGeometry(planeW, planeD);
+            const floorMat = new THREE.MeshBasicMaterial({
+                map: floorTex,
+                transparent: true,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+            });
+            const floorPlane = new THREE.Mesh(floorGeo, floorMat);
+            floorPlane.rotation.x = -Math.PI / 2;
+            floorPlane.position.set(cx, 0.02, cz + depth * 0.25);
+            floorPlane.userData.isLabel = true;
+            floorPlane.renderOrder = 1;
+            sgGroup.add(floorPlane);
 
             this.group.add(sgGroup);
-            this.subgraphs.set(sg.id, { group: sgGroup, box, edges, label });
+            this.subgraphs.set(sg.id, { group: sgGroup, box, edges, floorPlane });
         }
     }
 

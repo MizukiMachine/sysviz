@@ -1,4 +1,4 @@
-declare module '@/lib/three/rendering/ClusterRenderer' {
+declare module '@/lib/three/rendering/ClusterRenderer.js' {
   export class ClusterRenderer {
     constructor(canvas: HTMLCanvasElement);
     scene: any;
@@ -26,7 +26,7 @@ declare module '@/lib/three/rendering/ClusterRenderer' {
   }
 }
 
-declare module '@/lib/three/rendering/SubgraphRenderer' {
+declare module '@/lib/three/rendering/SubgraphRenderer.js' {
   export class SubgraphRenderer {
     constructor(scene: any);
     render(subgraphs: any, nodeSubgraphs: any, meshes: any): void;
@@ -35,7 +35,7 @@ declare module '@/lib/three/rendering/SubgraphRenderer' {
   }
 }
 
-declare module '@/lib/three/engine/PlaybackEngine' {
+declare module '@/lib/three/engine/PlaybackEngine.js' {
   export class PlaybackEngine {
     state: string;
     elapsed: number;
@@ -43,41 +43,18 @@ declare module '@/lib/three/engine/PlaybackEngine' {
     steps: any[];
     constructor(timeline: any, callbacks: any);
     play(): void;
-    pause(): void;
     stop(): void;
     next(): void;
     prev(): void;
     update(delta: number): void;
-    setTimeline(timeline: any): void;
   }
 }
 
-declare module '@/lib/three/data/FlaskFlow' {
-  export const FLASK_NODES: any[];
-  export const FLASK_CONNECTIONS: any[];
-  export const FLASK_TIMELINE: any;
-  export function buildTrafficRoutes(meshes: any): any[];
-}
+declare module '@/lib/three/parser/MermaidParser.js' {
+  type ViewConfig = import('@/types/visualization').ViewConfig;
 
-declare module '@/lib/three/data/FlaskDataFlow' {
-  export const DATA_FLOW_NODES: any[];
-  export const DATA_FLOW_CONNECTIONS: any[];
-  export const DATA_FLOW_TIMELINE: any;
-  export const DATA_FLOW_CAMERA: any;
-  export function buildTrafficRoutes(meshes: any): any[];
-}
-
-declare module '@/lib/three/data/FlaskSequence' {
-  export const SEQUENCE_NODES: any[];
-  export const SEQUENCE_CONNECTIONS: any[];
-  export const SEQUENCE_TIMELINE: any;
-  export const SEQUENCE_CAMERA: any;
-  export function buildTrafficRoutes(meshes: any): any[];
-}
-
-declare module '@/lib/three/parser/MermaidParser' {
   export class MermaidParser {
-    parse(url: string): Promise<any>;
-    parseText(text: string): any;
+    parse(url: string): Promise<ViewConfig>;
+    parseText(text: string): ViewConfig;
   }
 }

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { streamChat, type LLMMessage, type LLMConfig } from '@/lib/llm/LLMService';
+import { streamChat, type LLMConfig } from '@/lib/llm/LLMService';
 import { loadSettings, saveSettings, getActiveConfig, type LLMSettings } from '@/lib/llm/SettingsService';
 import { buildSystemPrompt } from '@/lib/llm/ContextBuilder';
 import type { PlaybackInfo } from './usePlayback';

@@ -1,7 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
 import { PlaybackEngine } from '@/lib/three/engine/PlaybackEngine.js';
 import type { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
-import * as THREE from 'three';
+import type { ViewConfig } from '@/types/visualization';
+
+/** Camera offset relative to the active node during playback */
+const PLAYBACK_CAMERA_OFFSET = { y: 6, z: 9 } as const;
 
 export type PlaybackState = 'idle' | 'playing' | 'paused';
 
@@ -17,7 +20,6 @@ export interface PlaybackInfo {
 
 export function usePlayback() {
   const engineRef = useRef<PlaybackEngine | null>(null);
-  const rendererRef = useRef<ClusterRenderer | null>(null);
   const [info, setInfo] = useState<PlaybackInfo>({
     state: 'idle',
     elapsed: 0,
@@ -28,7 +30,7 @@ export function usePlayback() {
     activeNodeId: null,
   });
 
-  const initEngine = useCallback((renderer: ClusterRenderer, timeline: any) => {
+  const initEngine = useCallback((renderer: ClusterRenderer, timeline: ViewConfig['timeline']) => {
     const engine = new PlaybackEngine(timeline, {
       onResourceState(resourceId: string, status: string) {
         renderer.setResourceStatus(resourceId, status);
@@ -41,7 +43,8 @@ export function usePlayback() {
         setInfo((prev) => ({ ...prev, currentCaption: text || '' }));
       },
       onReset() {
-        for (const id of [...renderer.resourceMeshes.keys()]) {
+        const allIds = [...renderer.resourceMeshes.keys()];
+        for (const id of allIds) {
           renderer.setResourceStatus(id, 'idle');
         }
         renderer.clearTrafficParticles();
@@ -64,7 +67,6 @@ export function usePlayback() {
           currentCaption: caption || '',
           activeNodeId: nodeId,
         }));
-        // Camera flies to the active node only on step change (not on loop resets)
         const mesh = renderer.resourceMeshes.get(nodeId);
         if (mesh) {
           let targetPos = mesh.position.clone();
@@ -74,14 +76,15 @@ export function usePlayback() {
               targetPos = mesh.position.clone().add(nextMesh.position).multiplyScalar(0.5);
             }
           }
-          const cameraPos = targetPos.clone().add(new THREE.Vector3(0, 3, 14));
+          const cameraPos = targetPos.clone();
+          cameraPos.y += PLAYBACK_CAMERA_OFFSET.y;
+          cameraPos.z += PLAYBACK_CAMERA_OFFSET.z;
           renderer.flyTo(targetPos, cameraPos, 1000);
         }
       },
     });
 
     engineRef.current = engine;
-    rendererRef.current = renderer;
 
     renderer.onAnimate = (delta: number) => {
       if (engine.state === 'playing') engine.update(delta);
@@ -101,7 +104,6 @@ export function usePlayback() {
   }, []);
 
   const play = useCallback(() => engineRef.current?.play(), []);
-  const pause = useCallback(() => engineRef.current?.pause(), []);
   const stop = useCallback(() => {
     engineRef.current?.stop();
     setInfo((prev) => ({
@@ -115,21 +117,5 @@ export function usePlayback() {
   const next = useCallback(() => engineRef.current?.next(), []);
   const prev = useCallback(() => engineRef.current?.prev(), []);
 
-  const setTimeline = useCallback((timeline: any) => {
-    if (engineRef.current) {
-      engineRef.current.setTimeline(timeline);
-      setInfo((prev) => ({
-        ...prev,
-        elapsed: 0,
-        duration: timeline.duration,
-        currentStep: -1,
-        totalSteps: engineRef.current?.steps.length || 0,
-        currentCaption: '',
-        activeNodeId: null,
-        state: 'idle',
-      }));
-    }
-  }, []);
-
-  return { info, initEngine, play, pause, stop, next, prev, setTimeline };
+  return { info, initEngine, play, stop, next, prev };
 }

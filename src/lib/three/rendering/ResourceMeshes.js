@@ -110,21 +110,6 @@ export function createLabelSprite(text, options = {}) {
     return sprite;
 }
 
-function createGlowRing(color, radius = 1.05) {
-    const geometry = new THREE.RingGeometry(radius * 0.82, radius, 48);
-    const material = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.18,
-        side: THREE.DoubleSide
-    });
-    const ring = new THREE.Mesh(geometry, material);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = -0.5 + 1.2;
-    ring.userData.isGlow = true;
-    return ring;
-}
-
 function createBodyMaterial(nodeColor, statusColor) {
     return new THREE.MeshStandardMaterial({
         color: nodeColor,
@@ -146,9 +131,6 @@ function createEdgeLines(geometry) {
 }
 
 function addResourceElements(group, resource, statusColor) {
-    const glowRing = createGlowRing(statusColor);
-    group.add(glowRing);
-
     const nameLabel = createLabelSprite(resource.name || resource.id || 'Node', {
         fontSize: 42,
         width: 768,
@@ -158,30 +140,35 @@ function addResourceElements(group, resource, statusColor) {
     nameLabel.position.set(0, 1.28, 0);
     group.add(nameLabel);
 
-    const dataInText = resource.dataIn ? `IN: ${resource.dataIn}` : 'IN: -';
-    const dataInLabel = createLabelSprite(dataInText, {
-        fontSize: 24,
-        width: 1024,
-        height: 128,
-        scale: { x: 4.2, y: 0.56, z: 1 }
-    });
-    dataInLabel.position.set(0, -0.02, 0.36);
-    group.add(dataInLabel);
+    if (resource.dataIn) {
+        const dataInLabel = createLabelSprite(`IN: ${resource.dataIn}`, {
+            fontSize: 24,
+            width: 1024,
+            height: 128,
+            scale: { x: 4.2, y: 0.56, z: 1 }
+        });
+        dataInLabel.position.set(0, -0.02, 0.36);
+        group.add(dataInLabel);
+    }
 
-    const dataOutText = resource.dataOut ? `OUT: ${resource.dataOut}` : 'OUT: -';
-    const dataOutLabel = createLabelSprite(dataOutText, {
-        fontSize: 24,
-        width: 1024,
-        height: 128,
-        scale: { x: 4.2, y: 0.56, z: 1 }
-    });
-    dataOutLabel.position.set(0, -0.68, 0.36);
-    group.add(dataOutLabel);
+    if (resource.dataOut) {
+        const dataOutLabel = createLabelSprite(`OUT: ${resource.dataOut}`, {
+            fontSize: 24,
+            width: 1024,
+            height: 128,
+            scale: { x: 4.2, y: 0.56, z: 1 }
+        });
+        dataOutLabel.position.set(0, -0.68, 0.36);
+        group.add(dataOutLabel);
+    }
 
     const idleY = resource.y || 0;
     group.userData.baseY = idleY;
     group.userData.animate = resource.animate || ((time) => {
-        glowRing.material.opacity = 0.12 + (Math.sin(time * 2.4 + (resource.glowOffset || 0)) + 1) * 0.04;
+        const light = group.getObjectByName('activePointLight');
+        if (light) {
+            light.intensity = 15 + Math.sin(time * 3) * 4;
+        }
     });
 }
 
@@ -274,17 +261,42 @@ export class ResourceMeshFactory {
     }
 
     updateStatus(group, status) {
+        const isActive = String(status).toLowerCase() === 'active';
         const statusColor = getStatusColor(status);
+
+        // Reuse existing PointLight
+        let light = group.getObjectByName('activePointLight');
+        if (isActive) {
+            if (!light) {
+                light = new THREE.PointLight(statusColor, 15, 12);
+                light.position.set(0, 1.5, 0);
+                light.name = 'activePointLight';
+                group.add(light);
+            } else {
+                light.color.set(statusColor);
+            }
+        } else if (light) {
+            group.remove(light);
+        }
+
         group.traverse((child) => {
             if (!child.material) return;
-            if (child.userData.isGlow) {
-                child.material.color.set(statusColor);
-                return;
-            }
             if (child.isMesh && !child.userData.isLabel && child.material.emissive) {
                 child.material.emissive.set(statusColor);
+                child.material.emissiveIntensity = isActive ? 0.95 : 0.14;
             }
         });
+
+        // Scale on active
+        if (isActive) {
+            group.scale.set(1.5, 1.5, 1.5);
+            group.userData.isScaled = true;
+        } else {
+            if (group.userData.isScaled) {
+                group.scale.set(1, 1, 1);
+                group.userData.isScaled = false;
+            }
+        }
     }
 
     dispose(group) {

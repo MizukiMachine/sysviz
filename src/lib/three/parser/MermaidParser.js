@@ -367,8 +367,8 @@ export class MermaidParser {
                 status: 'idle',
                 color: 0xe2e8f0,
                 x: 0, y: 0, z: 0,
-                dataIn: '-',
-                dataOut: '-',
+                dataIn: undefined,
+                dataOut: undefined,
                 floatOffset: i * 0.5,
                 glowOffset: i * 0.3 + 0.3
             });
@@ -524,8 +524,8 @@ export class MermaidParser {
         const cx = (minX + maxX) / 2;
         const spread = Math.max(maxX - minX, 10);
         return {
-            position: [cx, 4, cx + spread * 0.8],
-            target: [cx, 1.2, 0]
+            position: [cx, spread * 0.5, spread * 0.55],
+            target: [cx, 0, 0]
         };
     }
 
