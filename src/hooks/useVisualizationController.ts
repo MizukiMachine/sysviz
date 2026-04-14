@@ -78,8 +78,8 @@ export function useVisualizationController({
       }
 
       attempts += 1;
-      if (attempts < 20) {
-        pollTimer = window.setTimeout(poll, 50);
+      if (attempts < 100) {
+        pollTimer = window.setTimeout(poll, 100);
         return;
       }
 

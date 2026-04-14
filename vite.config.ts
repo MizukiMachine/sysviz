@@ -23,7 +23,7 @@ export default defineConfig({
           if (id.includes('node_modules/three')) {
             return 'three-vendor';
           }
-          if (id.includes('/src/lib/three/')) {
+          if (id.includes('/src/lib/three/') && !id.includes('PlaybackEngine')) {
             return 'three-core';
           }
           if (id.includes('node_modules/lucide-react')) {
