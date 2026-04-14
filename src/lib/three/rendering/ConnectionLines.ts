@@ -214,7 +214,7 @@ export class ConnectionLineManager {
     if (!entry) return;
 
     const baseSpeed = FLOW_SPEEDS[entry.connection.type as keyof typeof FLOW_SPEEDS] || FLOW_SPEEDS.default;
-    entry.line.material.opacity = active ? MAX_OPACITY : this._getBaseOpacity(entry.connection) * 0.7;
+    entry.line.material.opacity = active ? MAX_OPACITY : this._getBaseOpacity(entry.connection);
     (entry.line.userData as LineUserData).flowSpeed = baseSpeed * (active ? 2.4 : 0.45);
   }
 

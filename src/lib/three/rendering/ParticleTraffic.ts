@@ -348,7 +348,7 @@ export class ParticleTrafficSystem {
 
     const mid = new THREE.Vector3().lerpVectors(start, end, 0.5);
     const dist = start.distanceTo(end);
-    mid.y += Math.min(dist * 0.25, 2.5);
+    mid.y += Math.min(dist * 0.3, 3);
 
     return new THREE.QuadraticBezierCurve3(start, mid, end);
   }
