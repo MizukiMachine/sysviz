@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { createLabelSprite } from './ResourceMeshes.js';
 
 const RELATIONSHIP_COLORS = {
     ownership: 0xc9d1d9,
@@ -99,26 +98,11 @@ export class ConnectionLineManager {
 
         this.lineGroup.add(line);
 
-        // Connection label sprite at midpoint
-        let labelSprite = null;
-        if (connection._label) {
-            labelSprite = createLabelSprite(connection._label, {
-                fontSize: 22,
-                width: 512,
-                height: 64,
-                scale: { x: 2.8, y: 0.38, z: 1 }
-            });
-            labelSprite.position.copy(midpoint);
-            labelSprite.position.y += 0.4;
-            labelSprite.renderOrder = 5;
-            this.lineGroup.add(labelSprite);
-        }
-
         this.connections.set(connection.id, {
             line,
             connection,
             curve,
-            labelSprite,
+            labelSprite: null,
             sourcePos: sourcePos.clone(),
             targetPos: targetPos.clone(),
             midpoint: midpoint.clone()
@@ -204,63 +188,6 @@ export class ConnectionLineManager {
         const baseSpeed = FLOW_SPEEDS[entry.connection.type] || FLOW_SPEEDS.default;
         entry.line.material.opacity = active ? MAX_OPACITY : this._getBaseOpacity(entry.connection) * 0.35;
         entry.line.userData.flowSpeed = baseSpeed * (active ? 2.4 : 0.45);
-    }
-
-    sync(connectionsMap, resourceMeshes) {
-        const newIds = new Set();
-
-        for (const [id, conn] of connectionsMap) {
-            newIds.add(id);
-            if (!this.connections.has(id)) {
-                this.addConnection(conn, resourceMeshes);
-            }
-        }
-
-        for (const id of [...this.connections.keys()]) {
-            if (!newIds.has(id)) {
-                this.removeConnection(id);
-            }
-        }
-
-        this.updatePositions(resourceMeshes);
-    }
-
-    getConnectionsForResource(resourceId) {
-        const result = [];
-        for (const [id, entry] of this.connections) {
-            if (entry.connection.sourceId === resourceId ||
-                entry.connection.targetId === resourceId) {
-                result.push(entry.connection);
-            }
-        }
-        return result;
-    }
-
-    highlightConnectionsForResource(resourceId) {
-        for (const entry of this.connections.values()) {
-            const isRelated = entry.connection.sourceId === resourceId ||
-                              entry.connection.targetId === resourceId;
-            const baseSpeed = FLOW_SPEEDS[entry.connection.type] || FLOW_SPEEDS.default;
-            entry.line.material.opacity = isRelated ? MAX_OPACITY : MIN_OPACITY * 0.5;
-            entry.line.userData.flowSpeed = baseSpeed * (isRelated ? 2 : 0.5);
-        }
-    }
-
-    resetHighlight() {
-        for (const entry of this.connections.values()) {
-            const baseSpeed = FLOW_SPEEDS[entry.connection.type] || FLOW_SPEEDS.default;
-            entry.line.material.opacity = this._getBaseOpacity(entry.connection);
-            entry.line.userData.flowSpeed = baseSpeed * (0.5 + Math.random() * 0.5);
-        }
-    }
-
-    getCurveForConnection(connectionId) {
-        const entry = this.connections.get(connectionId);
-        return entry ? entry.curve : null;
-    }
-
-    getConnectionCount() {
-        return this.connections.size;
     }
 
     dispose() {

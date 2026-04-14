@@ -441,36 +441,9 @@ export class ParticleTrafficSystem {
         this.geometry.attributes.alpha.needsUpdate = true;
     }
 
-    syncRoutes(routesMap) {
-        const newIds = new Set();
-
-        for (const [id, route] of routesMap) {
-            newIds.add(id);
-            if (this.routes.has(id)) {
-                this.updateRoute(id, route);
-            } else {
-                this.addRoute(route);
-            }
-        }
-
-        for (const id of [...this.routes.keys()]) {
-            if (!newIds.has(id)) {
-                this.removeRoute(id);
-            }
-        }
-    }
-
     setRouteActive(routeId, active) {
         const route = this.routes.get(routeId);
         if (route) route.active = active;
-    }
-
-    getActiveParticleCount() {
-        return this.activeCount;
-    }
-
-    getRouteCount() {
-        return this.routes.size;
     }
 
     clearParticles() {

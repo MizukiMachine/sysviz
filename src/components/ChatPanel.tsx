@@ -9,7 +9,6 @@ import type { ChatMessage as ChatMessageType } from '@/hooks/useChat';
 
 interface ChatPanelProps {
   playbackInfo: PlaybackInfo;
-  selectedView: string;
   onClose: () => void;
   messages: ChatMessageType[];
   isLoading: boolean;
@@ -38,7 +37,6 @@ function getSuggestions(playbackInfo: PlaybackInfo): string[] {
 
 export function ChatPanel({
   playbackInfo,
-  selectedView,
   onClose,
   messages,
   isLoading,
@@ -145,4 +143,3 @@ export function ChatPanel({
     </>
   );
 }
-

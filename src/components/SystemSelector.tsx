@@ -1,9 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 
 const VIEW_OPTIONS = [
-  { value: 'flask-data-flow', label: 'Flask: Data Flow' },
-  { value: 'flask-sequence', label: 'Flask: Sequence' },
-  { value: 'flask-request-flow', label: 'Flask: Simplified Flow' },
   { value: 'mermaid-data-flow', label: 'Flask: Data Flow (.mmd)' },
 ] as const;
 

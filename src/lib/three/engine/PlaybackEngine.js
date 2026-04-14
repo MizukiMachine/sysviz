@@ -43,11 +43,6 @@ export class PlaybackEngine {
         this._startStepLoop(this.currentStep);
     }
 
-    pause() {
-        if (this.state !== 'playing') return;
-        this._setState('paused');
-    }
-
     stop() {
         this.stepLoopMode = false;
         this._rewind();
@@ -70,7 +65,10 @@ export class PlaybackEngine {
     }
 
     _startStepLoop(stepIndex) {
+        this.currentStep = stepIndex;
         const step = this.steps[stepIndex];
+        const nextStep = stepIndex < this.steps.length - 1 ? this.steps[stepIndex + 1] : null;
+        console.log(`[_startStepLoop] stepIndex=${stepIndex} nodeId=${step.nodeId} nextNodeId=${nextStep?.nodeId ?? 'none'} stepStart=${step.time.toFixed(1)} currentStep=${this.currentStep}`);
         const nextStepTime = stepIndex < this.steps.length - 1
             ? this.steps[stepIndex + 1].time
             : this.duration;
@@ -79,50 +77,58 @@ export class PlaybackEngine {
         this.stepStart = step.time;
         this.stepEnd = nextStepTime;
 
-        // Reset all resources to idle, then apply baseline (previous steps complete)
-        if (this.onReset) this.onReset();
-        if (this.onCaption) this.onCaption('');
+        // Set state to playing FIRST so lockDrag is true before any visual changes
+        this._setState('playing');
 
-        // Apply baseline: all keyframes before this step's start time
-        for (const frame of this.keyframes) {
-            if (frame.time < this.stepStart) {
-                this._applyKeyframe(frame);
+        console.log(`[_startStepLoop] → calling onReset()...`);
+        // 1. Reset all resources + clear routes/particles
+        if (this.onReset) this.onReset();
+        console.log(`[_startStepLoop] ← onReset() done. Now setting active states...`);
+
+        // 2. Set current + next nodes active so the active route's endpoints are both highlighted
+        if (this.onResourceState) {
+            console.log(`[_startStepLoop] → onResourceState(${step.nodeId}, 'active')`);
+            this.onResourceState(step.nodeId, 'active');
+            console.log(`[_startStepLoop] ← done. isScaled current node should be true now.`);
+            if (nextStep) {
+                console.log(`[_startStepLoop] → onResourceState(${nextStep.nodeId}, 'active')`);
+                this.onResourceState(nextStep.nodeId, 'active');
+                console.log(`[_startStepLoop] ← done. isScaled next node should be true now.`);
             }
         }
 
-        // Apply the step's own starting keyframes (node active, caption)
-        this.elapsed = this.stepStart;
-        this.nextKeyframeIndex = this.keyframes.findIndex(f => f.time >= this.stepStart);
-        if (this.nextKeyframeIndex === -1) this.nextKeyframeIndex = this.keyframes.length;
-        while (this.nextKeyframeIndex < this.keyframes.length) {
-            const frame = this.keyframes[this.nextKeyframeIndex];
-            if (frame.time > this.stepStart) break;
-            this._applyKeyframe(frame);
-            this.nextKeyframeIndex++;
+        // 3. Set caption
+        if (this.onCaption) {
+            this.onCaption(step.caption || '');
         }
 
-        this._setState('playing');
+        // Position elapsed and skip keyframes at stepStart
+        this.elapsed = this.stepStart;
+        this.nextKeyframeIndex = this.keyframes.findIndex(f => f.time > this.stepStart);
+        if (this.nextKeyframeIndex === -1) this.nextKeyframeIndex = this.keyframes.length;
 
-        // Notify step change (camera movement happens here, not in onResourceState)
+        // Notify step change (camera movement)
         if (this.onStepChange) {
             const nextNodeId = stepIndex < this.steps.length - 1
                 ? this.steps[stepIndex + 1].nodeId
                 : null;
             this.onStepChange(step.nodeId, nextNodeId, step.caption, stepIndex, this.steps.length);
         }
+        console.log(`[_startStepLoop] COMPLETE. currentStep=${this.currentStep} stepLoopMode=${this.stepLoopMode}`);
     }
 
     update(delta) {
         if (this.state !== 'playing') return;
 
         this.elapsed += delta;
-        this._drainKeyframesAtCurrentTime();
 
-        // Step loop: when the step's time window ends, reset and replay
+        // Step loop: check BEFORE draining keyframes to avoid flicker
         if (this.stepLoopMode && this.elapsed >= this.stepEnd) {
             this._loopReset();
             return;
         }
+
+        this._drainKeyframesAtCurrentTime();
 
         if (this.elapsed >= this.duration) {
             this._setState('idle');
@@ -132,29 +138,19 @@ export class PlaybackEngine {
     _loopReset() {
         const step = this.steps[this.currentStep];
         if (!step) return;
-
-        // Restore current node to active (was set to complete at stepEnd)
-        if (this.onResourceState) {
-            this.onResourceState(step.nodeId, 'active');
-        }
-
-        // Reset next step's node to idle (was activated at stepEnd)
-        if (this.currentStep < this.steps.length - 1) {
-            const nextNodeId = this.steps[this.currentStep + 1].nodeId;
-            if (this.onResourceState) {
-                this.onResourceState(nextNodeId, 'idle');
-            }
-        }
+        const nextStep = this.currentStep < this.steps.length - 1 ? this.steps[this.currentStep + 1] : null;
+        console.log(`[_loopReset] currentStep=${this.currentStep} nodeId=${step.nodeId} nextNodeId=${nextStep?.nodeId ?? 'none'}`);
 
         // Restore caption
         if (this.onCaption) {
             this.onCaption(step.caption || '');
         }
 
-        // Rewind elapsed and keyframe index to step start
+        // Rewind elapsed for the same step without clearing in-flight route particles.
         this.elapsed = this.stepStart;
-        this.nextKeyframeIndex = this.keyframes.findIndex(f => f.time >= this.stepStart);
+        this.nextKeyframeIndex = this.keyframes.findIndex(f => f.time > this.stepStart);
         if (this.nextKeyframeIndex === -1) this.nextKeyframeIndex = this.keyframes.length;
+        console.log(`[_loopReset] COMPLETE.`);
     }
 
     _drainKeyframesAtCurrentTime() {
@@ -183,16 +179,6 @@ export class PlaybackEngine {
         if (frame.type === 'route' && this.onRouteState) {
             this.onRouteState(frame.id, frame.active);
         }
-    }
-
-    setTimeline(timeline) {
-        this.state = 'idle';
-        this.stepLoopMode = false;
-        this.elapsed = 0;
-        this.duration = timeline.duration;
-        this.keyframes = timeline.keyframes.map((frame) => ({ ...frame }));
-        this.nextKeyframeIndex = 0;
-        this._extractSteps();
     }
 
     _rewind() {

@@ -3,6 +3,9 @@ import { PlaybackEngine } from '@/lib/three/engine/PlaybackEngine.js';
 import type { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
 import * as THREE from 'three';
 
+/** Camera offset relative to the active node during playback */
+const PLAYBACK_CAMERA_OFFSET = { y: 6, z: 9 } as const;
+
 export type PlaybackState = 'idle' | 'playing' | 'paused';
 
 export interface PlaybackInfo {
@@ -17,7 +20,6 @@ export interface PlaybackInfo {
 
 export function usePlayback() {
   const engineRef = useRef<PlaybackEngine | null>(null);
-  const rendererRef = useRef<ClusterRenderer | null>(null);
   const [info, setInfo] = useState<PlaybackInfo>({
     state: 'idle',
     elapsed: 0,
@@ -31,7 +33,20 @@ export function usePlayback() {
   const initEngine = useCallback((renderer: ClusterRenderer, timeline: any) => {
     const engine = new PlaybackEngine(timeline, {
       onResourceState(resourceId: string, status: string) {
+        console.log(`[usePlayback.onResourceState] ${resourceId} → ${status} | lockDrag=${renderer.lockDrag}`);
         renderer.setResourceStatus(resourceId, status);
+        // Immediately verify after call
+        const group = renderer.resourceMeshes.get(resourceId);
+        if (group) {
+          let eHex = '?', eInt = '?';
+          group.traverse(child => {
+            if ((child as any).isMesh && !(child as any).userData.isLabel && (child as any).material?.emissive) {
+              eHex = '#' + (child as any).material.emissive.getHex().toString(16).padStart(6, '0');
+              eInt = (child as any).material.emissiveIntensity.toFixed(2);
+            }
+          });
+          console.log(`[usePlayback.onResourceState] VERIFY ${resourceId} post-set: emissive=${eHex}/${eInt} scale=${group.scale.x.toFixed(2)} isScaled=${group.userData.isScaled}`);
+        }
       },
       onRouteState(routeId: string, active: boolean) {
         renderer.setTrafficRouteActive(routeId, active);
@@ -41,8 +56,24 @@ export function usePlayback() {
         setInfo((prev) => ({ ...prev, currentCaption: text || '' }));
       },
       onReset() {
-        for (const id of [...renderer.resourceMeshes.keys()]) {
+        const allIds = [...renderer.resourceMeshes.keys()];
+        console.log(`[usePlayback.onReset] Resetting ${allIds.length} nodes to idle: [${allIds.join(', ')}]`);
+        for (const id of allIds) {
           renderer.setResourceStatus(id, 'idle');
+        }
+        // Verify ALL nodes are idle after reset
+        for (const id of allIds) {
+          const group = renderer.resourceMeshes.get(id);
+          if (group) {
+            let eHex = '?', eInt = '?';
+            group.traverse(child => {
+              if ((child as any).isMesh && !(child as any).userData.isLabel && (child as any).material?.emissive) {
+                eHex = '#' + (child as any).material.emissive.getHex().toString(16).padStart(6, '0');
+                eInt = (child as any).material.emissiveIntensity.toFixed(2);
+              }
+            });
+            console.log(`[usePlayback.onReset] VERIFY ${id}: emissive=${eHex}/${eInt} scale=${group.scale.x.toFixed(2)} isScaled=${group.userData.isScaled}`);
+          }
         }
         renderer.clearTrafficParticles();
         for (const id of [...renderer.particleTraffic.routes.keys()]) {
@@ -53,6 +84,7 @@ export function usePlayback() {
         }
       },
       onStateChange(state: string) {
+        console.log(`[usePlayback.onStateChange] ${state} → lockDrag=${state === 'playing'}`);
         renderer.lockDrag = state === 'playing';
         setInfo((prev) => ({ ...prev, state: state as PlaybackState }));
       },
@@ -74,14 +106,13 @@ export function usePlayback() {
               targetPos = mesh.position.clone().add(nextMesh.position).multiplyScalar(0.5);
             }
           }
-          const cameraPos = targetPos.clone().add(new THREE.Vector3(0, 3, 14));
+          const cameraPos = targetPos.clone().add(new THREE.Vector3(0, PLAYBACK_CAMERA_OFFSET.y, PLAYBACK_CAMERA_OFFSET.z));
           renderer.flyTo(targetPos, cameraPos, 1000);
         }
       },
     });
 
     engineRef.current = engine;
-    rendererRef.current = renderer;
 
     renderer.onAnimate = (delta: number) => {
       if (engine.state === 'playing') engine.update(delta);
@@ -101,7 +132,6 @@ export function usePlayback() {
   }, []);
 
   const play = useCallback(() => engineRef.current?.play(), []);
-  const pause = useCallback(() => engineRef.current?.pause(), []);
   const stop = useCallback(() => {
     engineRef.current?.stop();
     setInfo((prev) => ({
@@ -115,21 +145,5 @@ export function usePlayback() {
   const next = useCallback(() => engineRef.current?.next(), []);
   const prev = useCallback(() => engineRef.current?.prev(), []);
 
-  const setTimeline = useCallback((timeline: any) => {
-    if (engineRef.current) {
-      engineRef.current.setTimeline(timeline);
-      setInfo((prev) => ({
-        ...prev,
-        elapsed: 0,
-        duration: timeline.duration,
-        currentStep: -1,
-        totalSteps: engineRef.current?.steps.length || 0,
-        currentCaption: '',
-        activeNodeId: null,
-        state: 'idle',
-      }));
-    }
-  }, []);
-
-  return { info, initEngine, play, pause, stop, next, prev, setTimeline };
+  return { info, initEngine, play, stop, next, prev };
 }

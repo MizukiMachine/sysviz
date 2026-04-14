@@ -43,36 +43,11 @@ declare module '@/lib/three/engine/PlaybackEngine' {
     steps: any[];
     constructor(timeline: any, callbacks: any);
     play(): void;
-    pause(): void;
     stop(): void;
     next(): void;
     prev(): void;
     update(delta: number): void;
-    setTimeline(timeline: any): void;
   }
-}
-
-declare module '@/lib/three/data/FlaskFlow' {
-  export const FLASK_NODES: any[];
-  export const FLASK_CONNECTIONS: any[];
-  export const FLASK_TIMELINE: any;
-  export function buildTrafficRoutes(meshes: any): any[];
-}
-
-declare module '@/lib/three/data/FlaskDataFlow' {
-  export const DATA_FLOW_NODES: any[];
-  export const DATA_FLOW_CONNECTIONS: any[];
-  export const DATA_FLOW_TIMELINE: any;
-  export const DATA_FLOW_CAMERA: any;
-  export function buildTrafficRoutes(meshes: any): any[];
-}
-
-declare module '@/lib/three/data/FlaskSequence' {
-  export const SEQUENCE_NODES: any[];
-  export const SEQUENCE_CONNECTIONS: any[];
-  export const SEQUENCE_TIMELINE: any;
-  export const SEQUENCE_CAMERA: any;
-  export function buildTrafficRoutes(meshes: any): any[];
 }
 
 declare module '@/lib/three/parser/MermaidParser' {
