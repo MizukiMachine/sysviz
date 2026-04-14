@@ -1,13 +1,16 @@
-import { useRef, useState } from 'react';
+import { lazy, Suspense, useRef, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Canvas3D, type Canvas3DHandle } from './components/Canvas3D';
 import { PlaybackControls } from './components/PlaybackControls';
 import { SystemSelector } from './components/SystemSelector';
 import { CaptionBar } from './components/CaptionBar';
-import { ChatPanel } from './components/ChatPanel';
 import { usePlayback } from './hooks/usePlayback';
 import { useChat } from './hooks/useChat';
 import { useVisualizationController } from './hooks/useVisualizationController';
+
+const ChatPanel = lazy(() =>
+  import('./components/ChatPanel').then((module) => ({ default: module.ChatPanel }))
+);
 
 export default function App() {
   const canvasRef = useRef<Canvas3DHandle>(null);
@@ -64,18 +67,20 @@ export default function App() {
 
       {/* Chat panel */}
       {isChatOpen && (
-        <ChatPanel
-          playbackInfo={playbackInfo}
-          onClose={() => setIsChatOpen(false)}
-          messages={chat.messages}
-          isLoading={chat.isLoading}
-          error={chat.error}
-          settings={chat.settings}
-          onSendMessage={(text) => chat.sendMessage(text, playbackInfo, selectedView)}
-          onStopStreaming={chat.stopStreaming}
-          onClearChat={chat.clearChat}
-          onUpdateSettings={chat.updateSettings}
-        />
+        <Suspense fallback={null}>
+          <ChatPanel
+            playbackInfo={playbackInfo}
+            onClose={() => setIsChatOpen(false)}
+            messages={chat.messages}
+            isLoading={chat.isLoading}
+            error={chat.error}
+            settings={chat.settings}
+            onSendMessage={(text) => chat.sendMessage(text, playbackInfo, selectedView)}
+            onStopStreaming={chat.stopStreaming}
+            onClearChat={chat.clearChat}
+            onUpdateSettings={chat.updateSettings}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { PlaybackEngine } from '@/lib/three/engine/PlaybackEngine.js';
 import type { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
-import * as THREE from 'three';
 import type { ViewConfig } from '@/types/visualization';
 
 /** Camera offset relative to the active node during playback */
@@ -77,7 +76,9 @@ export function usePlayback() {
               targetPos = mesh.position.clone().add(nextMesh.position).multiplyScalar(0.5);
             }
           }
-          const cameraPos = targetPos.clone().add(new THREE.Vector3(0, PLAYBACK_CAMERA_OFFSET.y, PLAYBACK_CAMERA_OFFSET.z));
+          const cameraPos = targetPos.clone();
+          cameraPos.y += PLAYBACK_CAMERA_OFFSET.y;
+          cameraPos.z += PLAYBACK_CAMERA_OFFSET.z;
           renderer.flyTo(targetPos, cameraPos, 1000);
         }
       },

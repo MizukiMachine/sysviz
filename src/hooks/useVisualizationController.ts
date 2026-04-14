@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MermaidParser } from '@/lib/three/parser/MermaidParser.js';
 import {
   DEFAULT_VIEW,
   MERMAID_DATA_FLOW_PATH,
@@ -27,10 +26,11 @@ export function useVisualizationController({
 
   useEffect(() => {
     let cancelled = false;
-    const mermaidParser = new MermaidParser();
-
-    mermaidParser
-      .parse(MERMAID_DATA_FLOW_PATH)
+    void import('@/lib/three/parser/MermaidParser.js')
+      .then(({ MermaidParser }) => {
+        const mermaidParser = new MermaidParser();
+        return mermaidParser.parse(MERMAID_DATA_FLOW_PATH);
+      })
       .then((data: ViewConfig) => {
         if (!cancelled) setMermaidView(data);
       })
