@@ -59,7 +59,7 @@ export function usePlayback() {
         renderer.lockDrag = state === 'playing';
         setInfo((prev) => ({ ...prev, state: state as PlaybackState }));
       },
-      onStepChange(nodeId: string, _nextNodeId: string, caption: string, stepIndex: number, totalSteps: number) {
+      onStepChange(nodeId: string, _nextNodeId: string | null, caption: string | undefined, stepIndex: number, totalSteps: number) {
         setInfo((prev) => ({
           ...prev,
           currentStep: stepIndex,
