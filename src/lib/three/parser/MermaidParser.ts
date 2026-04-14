@@ -479,6 +479,8 @@ export class MermaidParser {
     _subgraphs: Map<string, VisualizationSubgraph>,
     _nodeSubgraphs: Map<string, string>,
   ): void {
+    if (nodes.length === 0) return;
+
     const g = new dagre.graphlib.Graph();
     g.setGraph({ rankdir: direction, nodesep: 3, ranksep: 5, marginx: 1, marginy: 1 });
     g.setDefaultEdgeLabel(() => ({}));
@@ -491,21 +493,160 @@ export class MermaidParser {
     }
     dagre.layout(g);
 
-    const sorted = nodes
-      .filter((node) => g.node(node.id))
-      .sort((a, b) => (g.node(a.id) as { x: number }).x - (g.node(b.id) as { x: number }).x);
-
-    const X_STEP = 5;
-    for (let i = 0; i < sorted.length; i++) {
-      sorted[i].x = i * X_STEP;
-      sorted[i].y = 1.2;
-      sorted[i].z = 0;
+    // Build adjacency maps
+    const outMap = new Map<string, string[]>();
+    const inMap = new Map<string, string[]>();
+    for (const conn of connections) {
+      if (!outMap.has(conn.sourceId)) outMap.set(conn.sourceId, []);
+      outMap.get(conn.sourceId)!.push(conn.targetId);
+      if (!inMap.has(conn.targetId)) inMap.set(conn.targetId, []);
+      inMap.get(conn.targetId)!.push(conn.sourceId);
     }
 
-    if (sorted.length > 0) {
-      const cx = ((sorted.length - 1) * X_STEP) / 2;
+    // Dagre positions
+    type DagrePos = { x: number; y: number };
+    const dagrePos = new Map<string, DagrePos>();
+    for (const node of nodes) {
+      const dn = g.node(node.id) as DagrePos | undefined;
+      if (dn) dagrePos.set(node.id, dn);
+    }
+
+    // Find main path (longest source→sink)
+    const sources = nodes
+      .filter(n => !inMap.has(n.id) || inMap.get(n.id)!.length === 0)
+      .map(n => n.id);
+    const mainPath = this._findLongestPath(sources, outMap);
+    const mainPathSet = new Set(mainPath);
+
+    // Sort main path by dagre X
+    const mainPathSorted = [...mainPath].sort(
+      (a, b) => (dagrePos.get(a)?.x ?? 0) - (dagrePos.get(b)?.x ?? 0),
+    );
+
+    // Classify branch nodes (rejoin → behind z, dead-end → above y)
+    const branchInfo = this._classifyBranches(nodes, mainPathSet, outMap);
+
+    // Layout constants
+    const X_STEP = 5;
+    const BRANCH_Z = -6;
+    const BRANCH_Y_UP = 4;
+    const BASE_Y = 1.2;
+
+    // Place main path nodes
+    const nodeMap = new Map(nodes.map(n => [n.id, n]));
+    for (let i = 0; i < mainPathSorted.length; i++) {
+      const node = nodeMap.get(mainPathSorted[i])!;
+      node.x = i * X_STEP;
+      node.y = BASE_Y;
+      node.z = 0;
+    }
+
+    // Place branch nodes — at their branch point's X position
+    for (const node of nodes) {
+      if (mainPathSet.has(node.id)) continue;
+
+      // Find branch point (nearest main-path ancestor via BFS)
+      const branchPoint = this._findBranchPoint(node.id, mainPathSet, inMap);
+      const bpNode = branchPoint ? nodeMap.get(branchPoint) : null;
+      node.x = bpNode ? bpNode.x : 0;
+
+      const info = branchInfo.get(node.id);
+      if (info?.type === 'dead-end') {
+        node.y = BASE_Y + BRANCH_Y_UP * info.depth;
+        node.z = 0;
+      } else {
+        node.y = BASE_Y;
+        node.z = BRANCH_Z * info.depth;
+      }
+    }
+
+    // Center on main path
+    if (mainPathSorted.length > 0) {
+      const cx = ((mainPathSorted.length - 1) * X_STEP) / 2;
       for (const node of nodes) node.x -= cx;
     }
+  }
+
+  _findLongestPath(
+    sources: string[],
+    outMap: Map<string, string[]>,
+  ): string[] {
+    const memo = new Map<string, { length: number; path: string[] }>();
+    const computing = new Set<string>();
+
+    const dfs = (nodeId: string): { length: number; path: string[] } => {
+      if (memo.has(nodeId)) return memo.get(nodeId)!;
+      if (computing.has(nodeId)) return { length: 0, path: [] };
+      computing.add(nodeId);
+
+      const targets = outMap.get(nodeId) || [];
+      let best: { length: number; path: string[] } = { length: 0, path: [] };
+      for (const target of targets) {
+        const sub = dfs(target);
+        if (sub.length > best.length) best = sub;
+      }
+
+      computing.delete(nodeId);
+      const result = { length: best.length + 1, path: [nodeId, ...best.path] };
+      memo.set(nodeId, result);
+      return result;
+    };
+
+    let longestPath: string[] = [];
+    for (const source of sources) {
+      const result = dfs(source);
+      if (result.path.length > longestPath.length) longestPath = result.path;
+    }
+    return longestPath;
+  }
+
+  _findBranchPoint(
+    nodeId: string,
+    mainPathSet: Set<string>,
+    inMap: Map<string, string[]>,
+  ): string | null {
+    const visited = new Set<string>();
+    const queue: string[] = [...(inMap.get(nodeId) || [])];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      if (mainPathSet.has(current)) return current;
+      queue.push(...(inMap.get(current) || []));
+    }
+    return null;
+  }
+
+  _classifyBranches(
+    nodes: MermaidNode[],
+    mainPathSet: Set<string>,
+    outMap: Map<string, string[]>,
+  ): Map<string, { type: 'rejoin' | 'dead-end'; depth: number }> {
+    const result = new Map<string, { type: 'rejoin' | 'dead-end'; depth: number }>();
+    const cache = new Map<string, boolean>();
+
+    const reachesMain = (nodeId: string, visited: Set<string>): boolean => {
+      if (mainPathSet.has(nodeId)) return true;
+      if (cache.has(nodeId)) return cache.get(nodeId)!;
+      if (visited.has(nodeId)) return false;
+      visited.add(nodeId);
+
+      for (const target of (outMap.get(nodeId) || [])) {
+        if (reachesMain(target, visited)) {
+          cache.set(nodeId, true);
+          return true;
+        }
+      }
+      cache.set(nodeId, false);
+      return false;
+    };
+
+    for (const node of nodes) {
+      if (mainPathSet.has(node.id)) continue;
+      const reaches = reachesMain(node.id, new Set());
+      result.set(node.id, { type: reaches ? 'rejoin' : 'dead-end', depth: 1 });
+    }
+    return result;
   }
 
   _extractLayers(nodes: MermaidNode[], direction: MermaidDirection): string[][] {

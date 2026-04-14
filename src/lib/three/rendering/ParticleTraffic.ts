@@ -3,8 +3,8 @@ import type { VisualizationRoute } from '@/types/visualization';
 
 const POOL_SIZE = 512;
 const PARTICLE_BASE_SIZE = 5.0;
-const PARTICLE_MIN_SPEED = 0.7;
-const PARTICLE_MAX_SPEED = 1.5;
+const PARTICLE_MIN_SPEED = 0.9;
+const PARTICLE_MAX_SPEED = 1.8;
 const SPAWN_INTERVAL = 1.2;
 const TRAIL_LENGTH = 0;
 const FADE_IN_DURATION = 0.15;
