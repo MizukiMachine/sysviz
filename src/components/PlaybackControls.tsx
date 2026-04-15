@@ -1,4 +1,4 @@
-import { Play, Square, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Square } from 'lucide-react';
 import type { PlaybackInfo } from '@/hooks/usePlayback';
 
 interface PlaybackControlsProps {
@@ -17,20 +17,20 @@ export function PlaybackControls({ info, onPlay, onStop, onNext, onPrev }: Playb
 
   return (
     <div
-      className="fixed left-1/2 bottom-7 z-20 flex items-center gap-2.5 px-3.5 py-3 glass-pill"
+      className="fixed left-1/2 -translate-x-1/2 bottom-7 z-20 flex items-center gap-2.5 px-4 py-3 glass-pill"
       aria-label="Playback controls"
     >
-      <ControlButton onClick={onPrev} disabled={isFirstStep} ariaLabel="Previous step">
-        <SkipBack size={20} />
+      <ControlButton onClick={onPrev} disabled={isFirstStep} ariaLabel="前のステップ">
+        前のステップ
       </ControlButton>
-      <ControlButton onClick={onPlay} disabled={isPlaying} ariaLabel="Play current step">
+      <ControlButton onClick={onPlay} disabled={isPlaying} ariaLabel="再生">
         <Play size={20} />
       </ControlButton>
-      <ControlButton onClick={onStop} disabled={isIdle} ariaLabel="Stop">
+      <ControlButton onClick={onStop} disabled={isIdle} ariaLabel="停止" variant="stop">
         <Square size={18} />
       </ControlButton>
-      <ControlButton onClick={onNext} disabled={isLastStep} ariaLabel="Next step">
-        <SkipForward size={20} />
+      <ControlButton onClick={onNext} disabled={isLastStep} ariaLabel="次のステップ">
+        次のステップ
       </ControlButton>
     </div>
   );
@@ -49,6 +49,7 @@ function ControlButton({
   variant?: 'default' | 'stop';
   children: React.ReactNode;
 }) {
+  const isText = typeof children === 'string';
   return (
     <button
       onClick={onClick}
@@ -57,7 +58,7 @@ function ControlButton({
       type="button"
       className={`
         inline-flex items-center justify-center
-        w-11 h-11 p-0 border-0 rounded-full
+        ${isText ? 'h-11 px-4 rounded-full text-sm font-medium whitespace-nowrap' : 'w-11 h-11 p-0 border-0 rounded-full'}
         cursor-pointer
         transition-all duration-140 ease-in-out
         ${

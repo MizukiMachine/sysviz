@@ -43,7 +43,7 @@ export function SettingsDialog({ settings, onSave, onClose }: SettingsDialogProp
             Provider
           </label>
           <div className="flex gap-2">
-            {(['anthropic', 'openai'] as const).map((p) => (
+            {(['gemini', 'glm'] as const).map((p) => (
               <button
                 key={p}
                 onClick={() => setForm({ ...form, provider: p })}
@@ -56,14 +56,14 @@ export function SettingsDialog({ settings, onSave, onClose }: SettingsDialogProp
                   }
                 `}
               >
-                {p === 'anthropic' ? 'Anthropic Claude' : 'OpenAI'}
+                {p === 'gemini' ? 'Gemini' : 'GLM'}
               </button>
             ))}
           </div>
         </div>
 
         {/* API Key */}
-        <div className="mb-4">
+        <div className="mb-6">
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
             API Key
           </label>
@@ -79,28 +79,7 @@ export function SettingsDialog({ settings, onSave, onClose }: SettingsDialogProp
                 },
               })
             }
-            placeholder="sk-..."
-            className="w-full px-4 py-2.5 rounded-xl border border-slate-200/60 bg-white/60 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-400/50 font-mono"
-          />
-        </div>
-
-        {/* Model */}
-        <div className="mb-6">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-            Model
-          </label>
-          <input
-            type="text"
-            value={form[form.provider].model}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                [form.provider]: {
-                  ...form[form.provider],
-                  model: e.target.value,
-                },
-              })
-            }
+            placeholder={form.provider === 'gemini' ? 'AIza...' : 'sk-...'}
             className="w-full px-4 py-2.5 rounded-xl border border-slate-200/60 bg-white/60 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-400/50 font-mono"
           />
         </div>

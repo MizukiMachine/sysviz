@@ -202,6 +202,7 @@ export class MermaidParser {
       buildRoutes,
       subgraphs: tokens.subgraphs,
       nodeSubgraphs: tokens.nodeSubgraphs,
+      rawMmdText: mmdText,
     };
   }
 
@@ -556,7 +557,7 @@ export class MermaidParser {
         node.z = 0;
       } else {
         node.y = BASE_Y;
-        node.z = BRANCH_Z * info.depth;
+        node.z = info ? BRANCH_Z * info.depth : 0;
       }
     }
 
@@ -722,7 +723,7 @@ export class MermaidParser {
     const cx = (minX + maxX) / 2;
     const spread = Math.max(maxX - minX, 10);
     return {
-      position: [cx, spread * 0.5, spread * 0.55],
+      position: [cx, spread * 0.5 + 1.5, spread * 0.55],
       target: [cx, 0, 0],
     };
   }

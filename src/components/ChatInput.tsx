@@ -38,7 +38,7 @@ export function ChatInput({ onSend, onStop, isLoading, suggestions }: ChatInputP
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   };
 
   return (
@@ -53,7 +53,7 @@ export function ChatInput({ onSend, onStop, isLoading, suggestions }: ChatInputP
                 onSend(s);
               }}
               disabled={isLoading}
-              className="text-xs px-3 py-1.5 rounded-full border border-slate-200/60 bg-white/50 text-slate-600 hover:bg-white/80 hover:border-slate-300/60 transition-colors disabled:opacity-40 disabled:cursor-default cursor-pointer"
+              className="text-sm px-4 py-2.5 rounded-full border border-slate-200/60 bg-white/50 text-slate-600 hover:bg-white/80 hover:border-slate-300/60 transition-colors disabled:opacity-40 disabled:cursor-default cursor-pointer"
             >
               {s}
             </button>
@@ -71,25 +71,25 @@ export function ChatInput({ onSend, onStop, isLoading, suggestions }: ChatInputP
           onInput={handleInput}
           placeholder="質問を入力..."
           disabled={isLoading}
-          rows={1}
-          className="flex-1 resize-none px-4 py-2.5 rounded-2xl border border-slate-200/60 bg-white/60 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-400/50 focus:shadow-[0_0_0_3px_rgba(191,219,254,0.3)] disabled:opacity-60 transition-all"
+          rows={2}
+          className="flex-1 resize-none px-4 py-3 rounded-2xl border border-slate-200/60 bg-white/60 text-base text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-400/50 focus:shadow-[0_0_0_3px_rgba(191,219,254,0.3)] disabled:opacity-60 transition-all"
         />
         {isLoading ? (
           <button
             onClick={onStop}
-            className="flex items-center justify-center w-9 h-9 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors cursor-pointer"
+            className="flex items-center justify-center w-11 h-11 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition-colors cursor-pointer"
             aria-label="Stop"
           >
-            <Square size={14} />
+            <Square size={18} />
           </button>
         ) : (
           <button
             onClick={handleSubmit}
             disabled={!text.trim()}
-            className="flex items-center justify-center w-9 h-9 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors disabled:opacity-30 disabled:cursor-default cursor-pointer"
+            className="flex items-center justify-center w-11 h-11 rounded-full bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors disabled:opacity-30 disabled:cursor-default cursor-pointer"
             aria-label="Send"
           >
-            <Send size={14} />
+            <Send size={18} />
           </button>
         )}
       </div>

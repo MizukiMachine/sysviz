@@ -95,4 +95,5 @@ export interface ViewConfig {
   camera: VisualizationCamera | null;
   subgraphs: Map<string, VisualizationSubgraph>;
   nodeSubgraphs: Map<string, string>;
+  rawMmdText?: string;
 }

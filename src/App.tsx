@@ -24,7 +24,7 @@ export default function App() {
     prev,
   } = usePlayback();
   const chat = useChat();
-  const { selectedView, disabledOptions, handleViewChange } = useVisualizationController({
+  const { selectedView, disabledOptions, handleViewChange, mermaidView, rawMmdText } = useVisualizationController({
     canvasRef,
     initEngine,
     stop,
@@ -58,10 +58,10 @@ export default function App() {
       {!isChatOpen && (
         <button
           onClick={() => setIsChatOpen(true)}
-          className="fixed top-5 right-5 z-30 w-11 h-11 flex items-center justify-center rounded-full glass-panel cursor-pointer text-slate-600 hover:text-slate-800 hover:shadow-lg transition-all"
+          className="fixed top-5 right-5 z-30 w-14 h-14 flex items-center justify-center rounded-full glass-panel cursor-pointer text-slate-600 hover:text-slate-800 hover:shadow-lg transition-all"
           aria-label="Open chat"
         >
-          <MessageCircle size={20} />
+          <MessageCircle size={24} />
         </button>
       )}
 
@@ -70,12 +70,14 @@ export default function App() {
         <Suspense fallback={null}>
           <ChatPanel
             playbackInfo={playbackInfo}
+            viewConfig={mermaidView}
+            rawMmdText={rawMmdText}
             onClose={() => setIsChatOpen(false)}
             messages={chat.messages}
             isLoading={chat.isLoading}
             error={chat.error}
             settings={chat.settings}
-            onSendMessage={(text) => chat.sendMessage(text, playbackInfo, selectedView)}
+            onSendMessage={(text) => chat.sendMessage(text, playbackInfo, selectedView, mermaidView, rawMmdText)}
             onStopStreaming={chat.stopStreaming}
             onClearChat={chat.clearChat}
             onUpdateSettings={chat.updateSettings}

@@ -22,6 +22,7 @@ export function useVisualizationController({
   const [selectedView, setSelectedView] = useState<VisualizationKey>(DEFAULT_VIEW);
   const [disabledOptions, setDisabledOptions] = useState<Set<VisualizationKey>>(new Set());
   const [mermaidView, setMermaidView] = useState<ViewConfig | null>(null);
+  const [rawMmdText, setRawMmdText] = useState<string>('');
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -32,7 +33,10 @@ export function useVisualizationController({
         return mermaidParser.parse(MERMAID_DATA_FLOW_PATH);
       })
       .then((data: ViewConfig) => {
-        if (!cancelled) setMermaidView(data);
+        if (!cancelled) {
+          setMermaidView(data);
+          setRawMmdText(data.rawMmdText ?? '');
+        }
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -113,5 +117,7 @@ export function useVisualizationController({
     disabledOptions,
     selectedView,
     handleViewChange,
+    mermaidView,
+    rawMmdText,
   };
 }

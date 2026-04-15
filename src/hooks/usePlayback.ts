@@ -79,7 +79,9 @@ export function usePlayback() {
           const cameraPos = targetPos.clone();
           cameraPos.y += PLAYBACK_CAMERA_OFFSET.y;
           cameraPos.z += PLAYBACK_CAMERA_OFFSET.z;
-          renderer.flyTo(targetPos, cameraPos, 1000);
+          const viewTarget = targetPos.clone();
+          viewTarget.y -= 2.5;
+          renderer.flyTo(viewTarget, cameraPos, 1000);
         }
       },
     });

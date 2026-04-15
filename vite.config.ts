@@ -5,6 +5,15 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    proxy: {
+      '/api/glm': {
+        target: 'https://api.z.ai',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/glm/, '/api/anthropic'),
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
