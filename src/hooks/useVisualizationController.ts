@@ -7,6 +7,8 @@ import {
 import type { Canvas3DHandle } from '@/components/Canvas3D';
 import type { PlaybackInfo } from '@/hooks/usePlayback';
 import type { ViewConfig } from '@/types/visualization';
+import { enrichCaptions } from '@/lib/llm/CaptionGenerator';
+import { loadSettings, getActiveConfig } from '@/lib/llm/SettingsService';
 
 interface UseVisualizationControllerArgs {
   canvasRef: React.RefObject<Canvas3DHandle | null>;
@@ -23,6 +25,7 @@ export function useVisualizationController({
   const [disabledOptions, setDisabledOptions] = useState<Set<VisualizationKey>>(new Set());
   const [mermaidView, setMermaidView] = useState<ViewConfig | null>(null);
   const [rawMmdText, setRawMmdText] = useState<string>('');
+  const [isEnriching, setIsEnriching] = useState(false);
   const initializedRef = useRef(false);
 
   useEffect(() => {
@@ -32,10 +35,31 @@ export function useVisualizationController({
         const mermaidParser = new MermaidParser();
         return mermaidParser.parse(MERMAID_DATA_FLOW_PATH);
       })
-      .then((data: ViewConfig) => {
-        if (!cancelled) {
+      .then(async (data: ViewConfig) => {
+        if (cancelled) return;
+
+        const config = getActiveConfig(loadSettings());
+        if (!config) {
           setMermaidView(data);
           setRawMmdText(data.rawMmdText ?? '');
+          return;
+        }
+
+        setIsEnriching(true);
+        try {
+          const enriched = await enrichCaptions(data, config);
+          if (!cancelled) {
+            setMermaidView(enriched);
+            setRawMmdText(enriched.rawMmdText ?? '');
+          }
+        } catch (e) {
+          console.warn('Caption enrichment failed, using template captions:', e);
+          if (!cancelled) {
+            setMermaidView(data);
+            setRawMmdText(data.rawMmdText ?? '');
+          }
+        } finally {
+          if (!cancelled) setIsEnriching(false);
         }
       })
       .catch((error: unknown) => {
@@ -119,5 +143,6 @@ export function useVisualizationController({
     handleViewChange,
     mermaidView,
     rawMmdText,
+    isEnriching,
   };
 }

@@ -24,7 +24,7 @@ export default function App() {
     prev,
   } = usePlayback();
   const chat = useChat();
-  const { selectedView, disabledOptions, handleViewChange, mermaidView, rawMmdText } = useVisualizationController({
+  const { selectedView, disabledOptions, handleViewChange, mermaidView, rawMmdText, isEnriching } = useVisualizationController({
     canvasRef,
     initEngine,
     stop,
@@ -39,6 +39,15 @@ export default function App() {
         onChange={handleViewChange}
         disabledOptions={disabledOptions}
       />
+
+      {isEnriching && (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-48 z-20 pointer-events-none select-none">
+          <div className="rounded-full bg-white/70 backdrop-blur-sm shadow px-4 py-1.5 flex items-center gap-2">
+            <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs font-medium text-slate-500">AI解説を生成中...</span>
+          </div>
+        </div>
+      )}
 
       <CaptionBar
         text={playbackInfo.currentCaption}
