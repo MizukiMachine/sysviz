@@ -238,7 +238,7 @@ export class MermaidParser {
     let clusterBounds: Map<string, ClusterBounds> | undefined;
 
     try {
-      clusterBounds = await this._layoutFromMermaid(mmdText, nodes, tokens.subgraphs, tokens.direction);
+      clusterBounds = await this._layoutFromMermaid(mmdText, nodes, tokens.subgraphs, tokens.nodeSubgraphs, tokens.direction);
     } catch (e) {
       console.warn('MermaidParser: mermaid.render() layout failed; using deterministic fallback layout:', e);
       this._layoutDeterministicFallback(nodes, connections, tokens.direction);
@@ -597,6 +597,7 @@ export class MermaidParser {
     mmdText: string,
     nodes: MermaidNode[],
     subgraphs: Map<string, VisualizationSubgraph>,
+    nodeSubgraphs: Map<string, string>,
     direction: MermaidDirection,
   ): Promise<Map<string, ClusterBounds>> {
     const diagramId = `sysviz-${++_renderCounter}`;
@@ -625,7 +626,7 @@ export class MermaidParser {
     );
 
     const svgPos = this._parseSvgPositions(svgDoc);
-    return this._mapSvgTo3D(nodes, svgPos, idMap, direction);
+    return this._mapSvgTo3D(nodes, svgPos, idMap, direction, nodeSubgraphs);
   }
 
   /**
@@ -795,6 +796,7 @@ export class MermaidParser {
     svgPositions: SvgLayoutPositions,
     idMap: Map<string, string>,
     direction: MermaidDirection,
+    nodeSubgraphs: Map<string, string>,
   ): Map<string, ClusterBounds> {
     const clusterBounds = new Map<string, ClusterBounds>();
 
@@ -853,8 +855,17 @@ export class MermaidParser {
       }
     }
 
-    // Compute cluster bounds from SVG cluster rects with the same scaling.
-    // This preserves the 2D diagram's cluster proportions in 3D.
+    // Compute cluster bounds: start from SVG cluster rects (2D layout shape),
+    // then expand to ensure all member node positions are contained.
+    const clusterToNodes = new Map<string, MermaidNode[]>();
+    for (const node of nodes) {
+      const sgId = nodeSubgraphs.get(node.id);
+      if (sgId) {
+        if (!clusterToNodes.has(sgId)) clusterToNodes.set(sgId, []);
+        clusterToNodes.get(sgId)!.push(node);
+      }
+    }
+
     for (const [originalId, svgElId] of idMap.entries()) {
       const clusterPos = svgPositions.clusterPositions.get(svgElId);
       if (!clusterPos) continue;
@@ -863,12 +874,23 @@ export class MermaidParser {
       const halfW = (direction === 'LR' || direction === 'RL' ? clusterPos.width : clusterPos.height) / 2;
       const halfH = (direction === 'LR' || direction === 'RL' ? clusterPos.height : clusterPos.width) / 2;
 
-      clusterBounds.set(originalId, {
-        minX: (cCX - halfW - rawCX) * flowScale,
-        maxX: (cCX + halfW - rawCX) * flowScale,
-        minZ: (cCZ - halfH - rawCZ) * crossScale,
-        maxZ: (cCZ + halfH - rawCZ) * crossScale,
-      });
+      let minX = (cCX - halfW - rawCX) * flowScale;
+      let maxX = (cCX + halfW - rawCX) * flowScale;
+      let minZ = (cCZ - halfH - rawCZ) * crossScale;
+      let maxZ = (cCZ + halfH - rawCZ) * crossScale;
+
+      // Expand bounds to contain all member nodes
+      const members = clusterToNodes.get(originalId);
+      if (members) {
+        for (const member of members) {
+          minX = Math.min(minX, member.x);
+          maxX = Math.max(maxX, member.x);
+          minZ = Math.min(minZ, member.z);
+          maxZ = Math.max(maxZ, member.z);
+        }
+      }
+
+      clusterBounds.set(originalId, { minX, maxX, minZ, maxZ });
     }
 
     return clusterBounds;
