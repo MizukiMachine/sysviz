@@ -235,15 +235,17 @@ export class MermaidParser {
     const nodes = this._buildNodes(tokens);
     const connections = this._buildConnections(tokens);
 
-    let clusterBounds: Map<string, ClusterBounds> | undefined;
-
     try {
-      const result = await this._layoutFromMermaid(mmdText, nodes, tokens.subgraphs, tokens.direction);
-      clusterBounds = result.clusterBounds;
+      await this._layoutFromMermaid(mmdText, nodes, tokens.subgraphs, tokens.direction);
     } catch (e) {
       console.warn('MermaidParser: mermaid.render() layout failed; using deterministic fallback layout:', e);
       this._layoutDeterministicFallback(nodes, connections, tokens.direction);
     }
+
+    // Compute cluster bounds from actual node positions rather than SVG cluster rects.
+    // Mermaid's cluster rects include large 2D padding for labels/styling that causes
+    // overlapping areas in 3D.
+    const clusterBounds = this._computeClusterBoundsFromNodes(nodes, tokens.nodeSubgraphs);
 
     const layers = this._extractLayers(nodes, tokens.direction);
     this._applyColors(nodes, tokens.styles);
@@ -598,16 +600,15 @@ export class MermaidParser {
     nodes: MermaidNode[],
     subgraphs: Map<string, VisualizationSubgraph>,
     direction: MermaidDirection,
-  ): Promise<{ clusterBounds: Map<string, ClusterBounds> }> {
+  ): Promise<void> {
     const diagramId = `sysviz-${++_renderCounter}`;
 
-    // Dynamic import mermaid (browser-only, needs DOM)
     const mermaid = await import('mermaid');
     mermaid.default.initialize({
       startOnLoad: false,
       securityLevel: 'loose',
       theme: 'base',
-      flowchart: { nodeSpacing: 30, rankSpacing: 50 },
+      flowchart: { nodeSpacing: 100, rankSpacing: 50 },
     });
 
     const { svg } = await mermaid.default.render(diagramId, mmdText);
@@ -618,7 +619,6 @@ export class MermaidParser {
       throw new Error(`MermaidParser: failed to parse rendered SVG: ${parseError.textContent || 'unknown parser error'}`);
     }
 
-    // Resolve original node IDs from SVG element IDs
     const idMap = this._resolveSvgElementIds(
       svgDoc,
       diagramId,
@@ -626,13 +626,8 @@ export class MermaidParser {
       new Set(subgraphs.keys()),
     );
 
-    // Extract node positions from SVG transform attributes
     const svgPos = this._parseSvgPositions(svgDoc);
-
-    // Map SVG coordinates to 3D and extract cluster bounds
-    const clusterBounds = this._mapSvgTo3D(nodes, svgPos, idMap, direction);
-
-    return { clusterBounds };
+    this._mapSvgTo3D(nodes, svgPos, idMap, direction);
   }
 
   /**
@@ -797,17 +792,16 @@ export class MermaidParser {
    * - viewBox-independent: compute scale from actual node coordinate bounds
    * - TARGET_MAX_EXTENT = 50 for auto-scaling
    * - Direction-aware: flow axis and cross axis mapped correctly
-   * - Also computes clusterBounds from cluster SVG positions
+   * - viewBox-independent: compute scale from actual node coordinate bounds
+   * - TARGET_MAX_EXTENT = 50 for auto-scaling
+   * - Direction-aware: flow axis and cross axis mapped correctly
    */
   private _mapSvgTo3D(
     nodes: MermaidNode[],
     svgPositions: SvgLayoutPositions,
     idMap: Map<string, string>,
     direction: MermaidDirection,
-  ): Map<string, ClusterBounds> {
-    const clusterBounds = new Map<string, ClusterBounds>();
-
-    // Build a lookup: originalId -> {svgElId, x, y}
+  ): void {
     const nodeLookup = new Map<string, { x: number; y: number }>();
     for (const [originalId, svgElId] of idMap.entries()) {
       const pos = svgPositions.nodePositions.get(svgElId);
@@ -821,8 +815,6 @@ export class MermaidParser {
       throw new Error(`MermaidParser: rendered SVG did not contain positions for nodes: ${missingNodeIds.join(', ')}`);
     }
 
-    // Compute raw 3D positions for all nodes
-    const isFlowHorizontal = direction === 'LR' || direction === 'RL';
     const rawPositions = new Map<string, FlowPosition>();
 
     let rawMinX = Infinity;
@@ -842,12 +834,8 @@ export class MermaidParser {
       }
     }
 
-    // Handle case where no SVG positions were found
-    if (!isFinite(rawMinX)) {
-      return clusterBounds;
-    }
+    if (!isFinite(rawMinX)) return;
 
-    // Auto-scale to fit within TARGET_MAX_EXTENT
     const TARGET_MAX_EXTENT = 50;
     const rawExtentX = rawMaxX - rawMinX;
     const rawExtentZ = rawMaxZ - rawMinZ;
@@ -857,7 +845,6 @@ export class MermaidParser {
     const rawCX = (rawMinX + rawMaxX) / 2;
     const rawCZ = (rawMinZ + rawMaxZ) / 2;
 
-    // Apply to nodes
     for (const node of nodes) {
       const raw = rawPositions.get(node.id);
       if (raw) {
@@ -866,30 +853,6 @@ export class MermaidParser {
         node.y = 0;
       }
     }
-
-    // Compute cluster bounds in 3D space
-    for (const [originalId, svgElId] of idMap.entries()) {
-      const clusterPos = svgPositions.clusterPositions.get(svgElId);
-      if (!clusterPos) continue;
-
-      const { x: clusterCX, z: clusterCZ } = this._svgPointToFlowPosition(clusterPos, direction);
-      const clusterHalfW = (isFlowHorizontal ? clusterPos.width : clusterPos.height) / 2;
-      const clusterHalfH = (isFlowHorizontal ? clusterPos.height : clusterPos.width) / 2;
-
-      const min3X = (clusterCX - clusterHalfW - rawCX) * SCALE;
-      const max3X = (clusterCX + clusterHalfW - rawCX) * SCALE;
-      const min3Z = (clusterCZ - clusterHalfH - rawCZ) * SCALE;
-      const max3Z = (clusterCZ + clusterHalfH - rawCZ) * SCALE;
-
-      clusterBounds.set(originalId, {
-        minX: min3X,
-        maxX: max3X,
-        minZ: min3Z,
-        maxZ: max3Z,
-      });
-    }
-
-    return clusterBounds;
   }
 
   private _svgPointToFlowPosition(svgPos: SvgNodePosition, direction: MermaidDirection): FlowPosition {
@@ -897,6 +860,36 @@ export class MermaidParser {
       return { x: svgPos.x, z: svgPos.y };
     }
     return { x: svgPos.y, z: svgPos.x };
+  }
+
+  private _computeClusterBoundsFromNodes(
+    nodes: MermaidNode[],
+    nodeSubgraphs: Map<string, string>,
+  ): Map<string, ClusterBounds> {
+    const bounds = new Map<string, ClusterBounds>();
+    const membersByCluster = new Map<string, MermaidNode[]>();
+
+    for (const node of nodes) {
+      const clusterId = nodeSubgraphs.get(node.id);
+      if (!clusterId) continue;
+      if (!membersByCluster.has(clusterId)) membersByCluster.set(clusterId, []);
+      membersByCluster.get(clusterId)!.push(node);
+    }
+
+    for (const [clusterId, members] of membersByCluster) {
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (const node of members) {
+        minX = Math.min(minX, node.x);
+        maxX = Math.max(maxX, node.x);
+        minZ = Math.min(minZ, node.z);
+        maxZ = Math.max(maxZ, node.z);
+      }
+      if (isFinite(minX)) {
+        bounds.set(clusterId, { minX, maxX, minZ, maxZ });
+      }
+    }
+
+    return bounds;
   }
 
   // =========================================================================
