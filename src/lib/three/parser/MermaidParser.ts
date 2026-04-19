@@ -682,11 +682,17 @@ export class MermaidParser {
   private _resolveExpectedIdFromSvgSuffix(suffix: string, expectedIds: Set<string>): string | null {
     if (expectedIds.has(suffix)) return suffix;
 
+    // Mermaid v11 prefixes node (but not cluster) IDs with "flowchart-":
+    //   node:   {diagramId}-flowchart-{nodeId}-{index}
+    //   cluster: {diagramId}-{clusterId}
+    const stripped = suffix.startsWith('flowchart-') ? suffix.slice('flowchart-'.length) : suffix;
+    if (expectedIds.has(stripped)) return stripped;
+
     // Mermaid may append a numeric suffix to avoid SVG ID collisions. Prefer
     // the longest expected ID so original IDs such as "api-1" are not truncated
     // to "api" accidentally.
     const matches = [...expectedIds]
-      .filter((id) => suffix.startsWith(`${id}-`) && /^\d+$/.test(suffix.slice(id.length + 1)))
+      .filter((id) => stripped.startsWith(`${id}-`) && /^\d+$/.test(stripped.slice(id.length + 1)))
       .sort((a, b) => b.length - a.length);
 
     return matches[0] ?? null;
