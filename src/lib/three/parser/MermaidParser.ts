@@ -67,17 +67,11 @@ const FALLBACK_PALETTE = [
   0xc77dba, 0x8bd49e, 0xd4826a, 0x9aabb8,
 ];
 
-// ---------------------------------------------------------------------------
-// dagre kept for fallback when mermaid.render() fails
-// ---------------------------------------------------------------------------
-
-const SHAPE_DAGRE_SIZES = {
-  default: { width: 3.0, height: 1.6 },
-  sphere: { width: 2.2, height: 2.2 },
-  cylinder: { width: 2.0, height: 1.6 },
-  diamond: { width: 2.2, height: 2.2 },
-  torus: { width: 1.6, height: 1.6 },
-} as const;
+const SVG_NUMBER_PATTERN = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`;
+const SVG_TRANSLATE_RE = new RegExp(
+  String.raw`translate\(\s*(${SVG_NUMBER_PATTERN})(?:\s*,\s*|\s+)(${SVG_NUMBER_PATTERN})\s*\)`,
+  'i',
+);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -149,17 +143,29 @@ interface TokenizedMermaid {
 }
 
 interface SvgNodePosition {
-  /** dagre x coordinate (horizontal in SVG) */
+  /** Mermaid SVG x coordinate (horizontal in SVG) */
   x: number;
-  /** dagre y coordinate (vertical in SVG) */
+  /** Mermaid SVG y coordinate (vertical in SVG) */
   y: number;
 }
 
 interface SvgClusterPosition {
+  /** Center x in SVG coordinates. */
   x: number;
+  /** Center y in SVG coordinates. */
   y: number;
   width: number;
   height: number;
+}
+
+interface SvgLayoutPositions {
+  nodePositions: Map<string, SvgNodePosition>;
+  clusterPositions: Map<string, SvgClusterPosition>;
+}
+
+interface FlowPosition {
+  x: number;
+  z: number;
 }
 
 type BuildRoutesFn = ViewConfig['buildRoutes'];
@@ -229,22 +235,14 @@ export class MermaidParser {
     const nodes = this._buildNodes(tokens);
     const connections = this._buildConnections(tokens);
 
-    // Try mermaid.render() for layout; fall back to dagre on failure.
     let clusterBounds: Map<string, ClusterBounds> | undefined;
-    let layoutOk = false;
 
     try {
-      const result = await this._layoutFromMermaid(mmdText, nodes, tokens.direction);
-      if (result) {
-        layoutOk = true;
-        clusterBounds = result.clusterBounds;
-      }
+      const result = await this._layoutFromMermaid(mmdText, nodes, tokens.subgraphs, tokens.direction);
+      clusterBounds = result.clusterBounds;
     } catch (e) {
-      console.warn('MermaidParser: mermaid.render() failed, falling back to dagre:', e);
-    }
-
-    if (!layoutOk) {
-      await this._layoutWithDagre(nodes, connections, tokens.direction, tokens.subgraphs, tokens.nodeSubgraphs);
+      console.warn('MermaidParser: mermaid.render() layout failed; using deterministic fallback layout:', e);
+      this._layoutDeterministicFallback(nodes, connections, tokens.direction);
     }
 
     const layers = this._extractLayers(nodes, tokens.direction);
@@ -353,10 +351,11 @@ export class MermaidParser {
         const targetId = edgeM[6];
         const targetLabel = edgeM[7] !== undefined ? edgeM[7] : edgeM[8];
 
-        // Skip subgraph-to-subgraph edges (e.g. "PublicAPI --> Core" in component diagrams).
+        // Skip edges that use a subgraph as an endpoint. Those edges are valid
+        // Mermaid syntax, but SysViz routes need concrete node meshes.
         const isSourceCluster = subgraphs.has(sourceId) && sourceLabel === undefined;
         const isTargetCluster = subgraphs.has(targetId) && targetLabel === undefined;
-        if (isSourceCluster && isTargetCluster) continue;
+        if (isSourceCluster || isTargetCluster) continue;
 
         if (!isSourceCluster) this._registerInlineNode(rawNodes, sourceId, sourceLabel);
         if (!isTargetCluster) this._registerInlineNode(rawNodes, targetId, targetLabel);
@@ -591,13 +590,15 @@ export class MermaidParser {
 
   /**
    * Render mermaid diagram to SVG and extract node/cluster positions.
-   * Returns undefined if mermaid.render() fails.
+   * Throws if Mermaid cannot render or the SVG does not contain usable node
+   * positions. The caller applies a deterministic non-dagre fallback.
    */
   private async _layoutFromMermaid(
     mmdText: string,
     nodes: MermaidNode[],
+    subgraphs: Map<string, VisualizationSubgraph>,
     direction: MermaidDirection,
-  ): Promise<{ clusterBounds: Map<string, ClusterBounds> } | undefined> {
+  ): Promise<{ clusterBounds: Map<string, ClusterBounds> }> {
     const diagramId = `sysviz-${++_renderCounter}`;
 
     // Dynamic import mermaid (browser-only, needs DOM)
@@ -612,12 +613,21 @@ export class MermaidParser {
     const { svg } = await mermaid.default.render(diagramId, mmdText);
 
     const svgDoc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const parseError = svgDoc.querySelector('parsererror');
+    if (parseError) {
+      throw new Error(`MermaidParser: failed to parse rendered SVG: ${parseError.textContent || 'unknown parser error'}`);
+    }
 
     // Resolve original node IDs from SVG element IDs
-    const idMap = this._resolveNodeIds(svgDoc, diagramId);
+    const idMap = this._resolveSvgElementIds(
+      svgDoc,
+      diagramId,
+      new Set(nodes.map((node) => node.id)),
+      new Set(subgraphs.keys()),
+    );
 
     // Extract node positions from SVG transform attributes
-    const svgPos = this._parseSvgPositions(svgDoc, diagramId);
+    const svgPos = this._parseSvgPositions(svgDoc);
 
     // Map SVG coordinates to 3D and extract cluster bounds
     const clusterBounds = this._mapSvgTo3D(nodes, svgPos, idMap, direction);
@@ -626,24 +636,25 @@ export class MermaidParser {
   }
 
   /**
-   * Build a mapping from original node IDs to SVG element IDs.
-   * 3-stage resolution:
-   *   1. data-id attribute on <g> elements
-   *   2. Pattern: {diagramId}-{originalId} (with optional numeric suffix)
-   *   3. Text content fallback
+   * Build a mapping from original Mermaid IDs to rendered SVG element IDs.
+   * Mermaid v11 normally emits data-id, but the prefixed id fallback keeps this
+   * robust across renderer variants.
    */
-  private _resolveNodeIds(
+  private _resolveSvgElementIds(
     svgDoc: Document,
     diagramId: string,
+    nodeIds: Set<string>,
+    clusterIds: Set<string>,
   ): Map<string, string> {
     const idMap = new Map<string, string>();
+    const expectedIds = new Set([...nodeIds, ...clusterIds]);
 
     // Stage 1: data-id attribute
-    const dataIdEls = svgDoc.querySelectorAll('[data-id]');
+    const dataIdEls = svgDoc.querySelectorAll<SVGGElement>('g.node[data-id], g.cluster[data-id]');
     for (const el of dataIdEls) {
       const originalId = el.getAttribute('data-id');
       const svgElId = el.getAttribute('id');
-      if (originalId && svgElId && !idMap.has(originalId)) {
+      if (originalId && expectedIds.has(originalId) && svgElId && !idMap.has(originalId)) {
         idMap.set(originalId, svgElId);
       }
     }
@@ -651,73 +662,76 @@ export class MermaidParser {
     // Stage 2: ID pattern matching {diagramId}-{originalId}
     // mermaid prefixes all node/cluster IDs with the diagramId
     const prefix = `${diagramId}-`;
-    const allGroups = svgDoc.querySelectorAll('g[id]');
+    const allGroups = svgDoc.querySelectorAll<SVGGElement>('g.node[id], g.cluster[id]');
     for (const g of allGroups) {
-      const svgElId = g.getAttribute('id')!;
+      const svgElId = g.getAttribute('id');
+      if (!svgElId) continue;
       if (!svgElId.startsWith(prefix)) continue;
 
-      // Strip the prefix to get the original-ish ID
-      let stripped = svgElId.slice(prefix.length);
+      const stripped = svgElId.slice(prefix.length);
+      const resolvedId = this._resolveExpectedIdFromSvgSuffix(stripped, expectedIds);
 
-      // Remove optional numeric suffix like "-0", "-1"
-      const numericSuffix = stripped.match(/-(\d+)$/);
-      if (numericSuffix) {
-        stripped = stripped.slice(0, -numericSuffix[0].length);
-      }
-
-      if (stripped && !idMap.has(stripped)) {
-        idMap.set(stripped, svgElId);
+      if (resolvedId && !idMap.has(resolvedId)) {
+        idMap.set(resolvedId, svgElId);
       }
     }
 
     return idMap;
   }
 
+  private _resolveExpectedIdFromSvgSuffix(suffix: string, expectedIds: Set<string>): string | null {
+    if (expectedIds.has(suffix)) return suffix;
+
+    // Mermaid may append a numeric suffix to avoid SVG ID collisions. Prefer
+    // the longest expected ID so original IDs such as "api-1" are not truncated
+    // to "api" accidentally.
+    const matches = [...expectedIds]
+      .filter((id) => suffix.startsWith(`${id}-`) && /^\d+$/.test(suffix.slice(id.length + 1)))
+      .sort((a, b) => b.length - a.length);
+
+    return matches[0] ?? null;
+  }
+
   /**
    * Parse node and cluster positions from SVG elements.
-   * For regular nodes: transform="translate(x, y)" where x,y are dagre coords.
-   * For clusters (class="cluster"): transform="translate(x, y)" plus rect dimensions.
+   * Nodes usually use transform="translate(x, y)". Clusters may use either a
+   * translated group or absolute rect x/y coordinates depending on Mermaid's
+   * renderer version.
    */
-  private _parseSvgPositions(
-    svgDoc: Document,
-    diagramId: string,
-  ): {
-    nodePositions: Map<string, SvgNodePosition>;
-    clusterPositions: Map<string, SvgClusterPosition>;
-  } {
+  private _parseSvgPositions(svgDoc: Document): SvgLayoutPositions {
     const nodePositions = new Map<string, SvgNodePosition>();
     const clusterPositions = new Map<string, SvgClusterPosition>();
 
-    const allGroups = svgDoc.querySelectorAll('g[id]');
+    const allGroups = svgDoc.querySelectorAll<SVGGElement>('g[id]');
 
     for (const g of allGroups) {
-      const svgElId = g.getAttribute('id')!;
+      const svgElId = g.getAttribute('id');
+      if (!svgElId) continue;
       const classList = g.getAttribute('class') || '';
-
-      // Parse transform attribute for translate(x, y)
-      const transform = g.getAttribute('transform') || '';
-      const translateMatch = transform.match(/translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/);
-      if (!translateMatch) continue;
-
-      const tx = parseFloat(translateMatch[1]);
-      const ty = parseFloat(translateMatch[2]);
 
       const isCluster = classList.includes('cluster');
 
       if (isCluster) {
-        // For clusters, find the rect child to get dimensions
-        let width = 0;
-        let height = 0;
+        const groupTranslate = this._parseTranslate(g.getAttribute('transform'));
+        let x = groupTranslate?.x ?? 0;
+        let y = groupTranslate?.y ?? 0;
+        let width: number | null = null;
+        let height: number | null = null;
         const rect = g.querySelector('rect');
         if (rect) {
-          const rw = rect.getAttribute('width');
-          const rh = rect.getAttribute('height');
-          width = rw ? parseFloat(rw) : 0;
-          height = rh ? parseFloat(rh) : 0;
+          const rectX = this._parseSvgNumber(rect.getAttribute('x'));
+          const rectY = this._parseSvgNumber(rect.getAttribute('y'));
+          width = this._parseSvgNumber(rect.getAttribute('width'));
+          height = this._parseSvgNumber(rect.getAttribute('height'));
+
+          if (width !== null && height !== null) {
+            x += (rectX ?? 0) + width / 2;
+            y += (rectY ?? 0) + height / 2;
+          }
         }
 
-        // If no rect dimensions, try to compute from children bounding boxes
-        if (width === 0 || height === 0) {
+        // If no rect dimensions are available, approximate from child node centers.
+        if (width === null || height === null) {
           const childNodes = g.querySelectorAll('.node');
           if (childNodes.length > 0) {
             let minX = Infinity;
@@ -725,34 +739,55 @@ export class MermaidParser {
             let minY = Infinity;
             let maxY = -Infinity;
             for (const cn of childNodes) {
-              const ct = cn.getAttribute('transform') || '';
-              const cm = ct.match(/translate\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/);
-              if (cm) {
-                minX = Math.min(minX, parseFloat(cm[1]));
-                maxX = Math.max(maxX, parseFloat(cm[1]));
-                minY = Math.min(minY, parseFloat(cm[2]));
-                maxY = Math.max(maxY, parseFloat(cm[2]));
+              const childTranslate = this._parseTranslate(cn.getAttribute('transform'));
+              if (childTranslate) {
+                minX = Math.min(minX, childTranslate.x);
+                maxX = Math.max(maxX, childTranslate.x);
+                minY = Math.min(minY, childTranslate.y);
+                maxY = Math.max(maxY, childTranslate.y);
               }
             }
             if (isFinite(minX)) {
               width = maxX - minX;
               height = maxY - minY;
+              x = (minX + maxX) / 2;
+              y = (minY + maxY) / 2;
             }
           }
         }
 
-        clusterPositions.set(svgElId, { x: tx, y: ty, width, height });
+        if (width !== null && height !== null && width > 0 && height > 0) {
+          clusterPositions.set(svgElId, { x, y, width, height });
+        }
       } else if (classList.includes('node') || classList.includes('default')) {
-        // Regular node
-        nodePositions.set(svgElId, { x: tx, y: ty });
+        const translate = this._parseTranslate(g.getAttribute('transform'));
+        if (translate) {
+          nodePositions.set(svgElId, translate);
+        }
       }
     }
 
     return { nodePositions, clusterPositions };
   }
 
+  private _parseTranslate(transform: string | null): SvgNodePosition | null {
+    if (!transform) return null;
+    const translateMatch = transform.match(SVG_TRANSLATE_RE);
+    if (!translateMatch) return null;
+    const x = Number(translateMatch[1]);
+    const y = Number(translateMatch[2]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  }
+
+  private _parseSvgNumber(value: string | null): number | null {
+    if (!value) return null;
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   /**
-   * Map SVG (dagre) coordinates to 3D world coordinates.
+   * Map SVG coordinates to 3D world coordinates.
    * - viewBox-independent: compute scale from actual node coordinate bounds
    * - TARGET_MAX_EXTENT = 50 for auto-scaling
    * - Direction-aware: flow axis and cross axis mapped correctly
@@ -760,7 +795,7 @@ export class MermaidParser {
    */
   private _mapSvgTo3D(
     nodes: MermaidNode[],
-    svgPositions: { nodePositions: Map<string, SvgNodePosition>; clusterPositions: Map<string, SvgClusterPosition> },
+    svgPositions: SvgLayoutPositions,
     idMap: Map<string, string>,
     direction: MermaidDirection,
   ): Map<string, ClusterBounds> {
@@ -775,9 +810,14 @@ export class MermaidParser {
       }
     }
 
+    const missingNodeIds = nodes.filter((node) => !nodeLookup.has(node.id)).map((node) => node.id);
+    if (missingNodeIds.length > 0) {
+      throw new Error(`MermaidParser: rendered SVG did not contain positions for nodes: ${missingNodeIds.join(', ')}`);
+    }
+
     // Compute raw 3D positions for all nodes
     const isFlowHorizontal = direction === 'LR' || direction === 'RL';
-    const rawPositions = new Map<string, { x: number; z: number }>();
+    const rawPositions = new Map<string, FlowPosition>();
 
     let rawMinX = Infinity;
     let rawMaxX = -Infinity;
@@ -787,9 +827,7 @@ export class MermaidParser {
     for (const node of nodes) {
       const svgPos = nodeLookup.get(node.id);
       if (svgPos) {
-        // Map dagre coordinates to 3D flow/cross axes
-        const r3x = isFlowHorizontal ? svgPos.x : svgPos.y;
-        const r3z = isFlowHorizontal ? svgPos.y : svgPos.x;
+        const { x: r3x, z: r3z } = this._svgPointToFlowPosition(svgPos, direction);
         rawPositions.set(node.id, { x: r3x, z: r3z });
         rawMinX = Math.min(rawMinX, r3x);
         rawMaxX = Math.max(rawMaxX, r3x);
@@ -828,9 +866,7 @@ export class MermaidParser {
       const clusterPos = svgPositions.clusterPositions.get(svgElId);
       if (!clusterPos) continue;
 
-      // Convert cluster bounding box to 3D
-      const clusterCX = isFlowHorizontal ? clusterPos.x : clusterPos.y;
-      const clusterCZ = isFlowHorizontal ? clusterPos.y : clusterPos.x;
+      const { x: clusterCX, z: clusterCZ } = this._svgPointToFlowPosition(clusterPos, direction);
       const clusterHalfW = (isFlowHorizontal ? clusterPos.width : clusterPos.height) / 2;
       const clusterHalfH = (isFlowHorizontal ? clusterPos.height : clusterPos.width) / 2;
 
@@ -850,105 +886,85 @@ export class MermaidParser {
     return clusterBounds;
   }
 
+  private _svgPointToFlowPosition(svgPos: SvgNodePosition, direction: MermaidDirection): FlowPosition {
+    if (direction === 'LR' || direction === 'RL') {
+      return { x: svgPos.x, z: svgPos.y };
+    }
+    return { x: svgPos.y, z: svgPos.x };
+  }
+
   // =========================================================================
-  // Layout: dagre fallback (kept for when mermaid.render() fails)
+  // Layout: deterministic fallback (no dagre)
   // =========================================================================
 
-  private async _layoutWithDagre(
+  private _layoutDeterministicFallback(
     nodes: MermaidNode[],
     connections: MermaidConnection[],
     direction: MermaidDirection,
-    subgraphs: Map<string, VisualizationSubgraph>,
-    nodeSubgraphs: Map<string, string>,
-  ): Promise<void> {
-    const dagre = await import('dagre');
-
+  ): void {
     if (nodes.length === 0) return;
 
-    const g = new dagre.graphlib.Graph({ compound: true });
-    g.setGraph({ rankdir: direction, nodesep: 3, ranksep: 4, marginx: 2, marginy: 2 });
-    g.setDefaultEdgeLabel(() => ({}));
-
-    for (const [sgId] of subgraphs) {
-      g.setNode(sgId, { width: 10, height: 10 });
-    }
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    const indegree = new Map<string, number>();
+    const outgoing = new Map<string, string[]>();
+    const layerById = new Map<string, number>();
     for (const node of nodes) {
-      const size = SHAPE_DAGRE_SIZES[node.shape] || SHAPE_DAGRE_SIZES.default;
-      g.setNode(node.id, { width: size.width, height: size.height });
-    }
-    for (const [nodeId, sgId] of nodeSubgraphs) {
-      g.setParent(nodeId, sgId);
-    }
-    for (const conn of connections) {
-      g.setEdge(conn.sourceId, conn.targetId);
+      indegree.set(node.id, 0);
+      outgoing.set(node.id, []);
     }
 
-    try {
-      dagre.layout(g);
-    } catch (_e) {
-      g.setGraph({ ...g.graph(), acyclicer: 'greedy' });
-      try {
-        dagre.layout(g);
-      } catch {
-        for (let i = 0; i < nodes.length; i++) {
-          nodes[i].x = (i - (nodes.length - 1) / 2) * 5;
-          nodes[i].z = 0;
-          nodes[i].y = 0;
-        }
-        return;
+    for (const connection of connections) {
+      if (!nodeIds.has(connection.sourceId) || !nodeIds.has(connection.targetId)) continue;
+      outgoing.get(connection.sourceId)?.push(connection.targetId);
+      indegree.set(connection.targetId, (indegree.get(connection.targetId) ?? 0) + 1);
+    }
+
+    const queue = nodes.filter((node) => (indegree.get(node.id) ?? 0) === 0).map((node) => node.id);
+    for (const id of queue) layerById.set(id, 0);
+
+    while (queue.length > 0) {
+      const id = queue.shift();
+      if (id === undefined) continue;
+      const sourceLayer = layerById.get(id) ?? 0;
+      for (const targetId of outgoing.get(id) ?? []) {
+        layerById.set(targetId, Math.max(layerById.get(targetId) ?? 0, sourceLayer + 1));
+        const nextIndegree = (indegree.get(targetId) ?? 0) - 1;
+        indegree.set(targetId, nextIndegree);
+        if (nextIndegree === 0) queue.push(targetId);
       }
     }
 
-    type DagrePos = { x: number; y: number };
-    const dagrePos = new Map<string, DagrePos>();
+    // Cyclic or disconnected nodes that were not reached keep their declaration
+    // order, grouped after the acyclic layers.
+    const maxLayer = Math.max(0, ...layerById.values());
+    let overflow = 0;
     for (const node of nodes) {
-      const dn = g.node(node.id) as DagrePos | undefined;
-      if (dn) dagrePos.set(node.id, dn);
-    }
-
-    this._layoutFlat(nodes, dagrePos, direction);
-  }
-
-  private _layoutFlat(
-    nodes: MermaidNode[],
-    dagrePos: Map<string, { x: number; y: number }>,
-    direction: MermaidDirection,
-  ): void {
-    const isFlowHorizontal = direction === 'LR' || direction === 'RL';
-
-    const rawPositions = new Map<string, { x: number; z: number }>();
-    let rawMinX = Infinity;
-    let rawMaxX = -Infinity;
-    let rawMinZ = Infinity;
-    let rawMaxZ = -Infinity;
-
-    for (const node of nodes) {
-      const dp = dagrePos.get(node.id);
-      if (dp) {
-        const r3x = isFlowHorizontal ? dp.x : dp.y;
-        const r3z = isFlowHorizontal ? dp.y : dp.x;
-        rawPositions.set(node.id, { x: r3x, z: r3z });
-        rawMinX = Math.min(rawMinX, r3x);
-        rawMaxX = Math.max(rawMaxX, r3x);
-        rawMinZ = Math.min(rawMinZ, r3z);
-        rawMaxZ = Math.max(rawMaxZ, r3z);
+      if (!layerById.has(node.id)) {
+        layerById.set(node.id, maxLayer + Math.floor(overflow / 4) + 1);
+        overflow++;
       }
     }
 
-    const TARGET_MAX_EXTENT = 50;
-    const rawExtentX = rawMaxX - rawMinX;
-    const rawExtentZ = rawMaxZ - rawMinZ;
-    const rawExtent = Math.max(rawExtentX, rawExtentZ, 1);
-    const SCALE = Math.min(0.8, TARGET_MAX_EXTENT / rawExtent);
-
-    const rawCX = (rawMinX + rawMaxX) / 2;
-    const rawCZ = (rawMinZ + rawMaxZ) / 2;
-
+    const byLayer = new Map<number, MermaidNode[]>();
     for (const node of nodes) {
-      const raw = rawPositions.get(node.id);
-      if (raw) {
-        node.x = (raw.x - rawCX) * SCALE;
-        node.z = (raw.z - rawCZ) * SCALE;
+      const layer = layerById.get(node.id) ?? 0;
+      if (!byLayer.has(layer)) byLayer.set(layer, []);
+      byLayer.get(layer)?.push(node);
+    }
+
+    const layerStep = 6;
+    const crossStep = 4;
+    const sortedLayers = [...byLayer.keys()].sort((a, b) => a - b);
+    const reverseFlow = direction === 'RL' || direction === 'BT';
+
+    for (const [layerIndex, layer] of sortedLayers.entries()) {
+      const members = byLayer.get(layer) ?? [];
+      const flow = (reverseFlow ? sortedLayers.length - layerIndex - 1 : layerIndex) * layerStep;
+      for (let index = 0; index < members.length; index++) {
+        const cross = (index - (members.length - 1) / 2) * crossStep;
+        const node = members[index];
+        node.x = flow - ((sortedLayers.length - 1) * layerStep) / 2;
+        node.z = cross;
         node.y = 0;
       }
     }
@@ -958,15 +974,16 @@ export class MermaidParser {
   // Layers, colors, data labels (unchanged)
   // =========================================================================
 
-  _extractLayers(nodes: MermaidNode[], _direction: MermaidDirection): string[][] {
-    const sorted = [...nodes].sort((a, b) => a.x - b.x);
+  _extractLayers(nodes: MermaidNode[], direction: MermaidDirection): string[][] {
+    const order = direction === 'RL' || direction === 'BT' ? -1 : 1;
+    const sorted = [...nodes].sort((a, b) => (a.x - b.x) * order);
 
     if (sorted.length === 0) return [];
 
     const flowPositions = sorted.map((n) => n.x);
     let minGap = Infinity;
     for (let i = 1; i < flowPositions.length; i++) {
-      const gap = flowPositions[i] - flowPositions[i - 1];
+      const gap = Math.abs(flowPositions[i] - flowPositions[i - 1]);
       if (gap > 0 && gap < minGap) minGap = gap;
     }
     const TOLERANCE = isFinite(minGap) ? minGap * 0.4 : 1.8;

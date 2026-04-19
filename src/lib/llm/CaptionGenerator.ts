@@ -1,5 +1,7 @@
-import type { ViewConfig, VisualizationTimelineKeyframe } from '@/types/visualization';
+import type { ViewConfig, VisualizationResourceTimelineKeyframe, VisualizationTimelineKeyframe } from '@/types/visualization';
 import { generateChat, type LLMConfig, type LLMMessage } from './LLMService';
+
+type ActiveResourceKeyframe = Omit<VisualizationResourceTimelineKeyframe, 'status'> & { status: 'active' };
 
 interface StepInfo {
   index: number;
@@ -10,12 +12,18 @@ interface StepInfo {
   incoming: { sourceId: string; sourceName: string; label: string | null }[];
 }
 
+function isActiveResourceKeyframe(frame: VisualizationTimelineKeyframe): frame is ActiveResourceKeyframe {
+  return frame.type === 'resource' && frame.status === 'active';
+}
+
+function keyframeCaptionKey(frame: ActiveResourceKeyframe): string {
+  return `${frame.time}:${frame.id}`;
+}
+
 function extractSteps(config: ViewConfig): StepInfo[] {
   const nodeMap = new Map(config.nodes.map((n) => [n.id, n]));
   const activeFrames = config.timeline.keyframes
-    .filter((f): f is VisualizationTimelineKeyframe & { type: 'resource'; status: 'active' } =>
-      f.type === 'resource' && f.status === 'active'
-    )
+    .filter(isActiveResourceKeyframe)
     .sort((a, b) => a.time - b.time);
 
   return activeFrames.map((frame, index) => {
@@ -105,15 +113,13 @@ export async function enrichCaptions(
 
   // Build new keyframes with enriched captions
   const activeFrames = viewConfig.timeline.keyframes
-    .filter((f): f is VisualizationTimelineKeyframe & { type: 'resource'; status: 'active' } =>
-      f.type === 'resource' && f.status === 'active'
-    )
+    .filter(isActiveResourceKeyframe)
     .sort((a, b) => a.time - b.time);
 
-  const captionMap = new Map(activeFrames.map((f, i) => [f, captions[i]]));
+  const captionMap = new Map(activeFrames.map((f, i) => [keyframeCaptionKey(f), captions[i]]));
 
   const newKeyframes = viewConfig.timeline.keyframes.map((f) => {
-    const caption = captionMap.get(f);
+    const caption = isActiveResourceKeyframe(f) ? captionMap.get(keyframeCaptionKey(f)) : null;
     if (caption) return { ...f, caption };
     return f;
   });
