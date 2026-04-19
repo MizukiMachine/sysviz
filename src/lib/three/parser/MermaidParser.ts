@@ -235,17 +235,15 @@ export class MermaidParser {
     const nodes = this._buildNodes(tokens);
     const connections = this._buildConnections(tokens);
 
+    let clusterBounds: Map<string, ClusterBounds> | undefined;
+
     try {
-      await this._layoutFromMermaid(mmdText, nodes, tokens.subgraphs, tokens.direction);
+      clusterBounds = await this._layoutFromMermaid(mmdText, nodes, tokens.subgraphs, tokens.direction);
     } catch (e) {
       console.warn('MermaidParser: mermaid.render() layout failed; using deterministic fallback layout:', e);
       this._layoutDeterministicFallback(nodes, connections, tokens.direction);
+      clusterBounds = this._computeClusterBoundsFromNodes(nodes, tokens.nodeSubgraphs);
     }
-
-    // Compute cluster bounds from actual node positions rather than SVG cluster rects.
-    // Mermaid's cluster rects include large 2D padding for labels/styling that causes
-    // overlapping areas in 3D.
-    const clusterBounds = this._computeClusterBoundsFromNodes(nodes, tokens.nodeSubgraphs);
 
     const layers = this._extractLayers(nodes, tokens.direction);
     this._applyColors(nodes, tokens.styles);
@@ -600,7 +598,7 @@ export class MermaidParser {
     nodes: MermaidNode[],
     subgraphs: Map<string, VisualizationSubgraph>,
     direction: MermaidDirection,
-  ): Promise<void> {
+  ): Promise<Map<string, ClusterBounds>> {
     const diagramId = `sysviz-${++_renderCounter}`;
 
     const mermaid = await import('mermaid');
@@ -608,7 +606,7 @@ export class MermaidParser {
       startOnLoad: false,
       securityLevel: 'loose',
       theme: 'base',
-      flowchart: { nodeSpacing: 100, rankSpacing: 50 },
+      flowchart: { nodeSpacing: 50, rankSpacing: 50 },
     });
 
     const { svg } = await mermaid.default.render(diagramId, mmdText);
@@ -627,7 +625,7 @@ export class MermaidParser {
     );
 
     const svgPos = this._parseSvgPositions(svgDoc);
-    this._mapSvgTo3D(nodes, svgPos, idMap, direction);
+    return this._mapSvgTo3D(nodes, svgPos, idMap, direction);
   }
 
   /**
@@ -788,20 +786,18 @@ export class MermaidParser {
   }
 
   /**
-   * Map SVG coordinates to 3D world coordinates.
-   * - viewBox-independent: compute scale from actual node coordinate bounds
-   * - TARGET_MAX_EXTENT = 50 for auto-scaling
-   * - Direction-aware: flow axis and cross axis mapped correctly
-   * - viewBox-independent: compute scale from actual node coordinate bounds
-   * - TARGET_MAX_EXTENT = 50 for auto-scaling
-   * - Direction-aware: flow axis and cross axis mapped correctly
+   * Map SVG coordinates to 3D world coordinates using non-uniform scaling.
+   * Returns cluster bounds derived from SVG cluster rects with the same scaling,
+   * so the 3D subgraph areas match the 2D mermaid diagram proportions.
    */
   private _mapSvgTo3D(
     nodes: MermaidNode[],
     svgPositions: SvgLayoutPositions,
     idMap: Map<string, string>,
     direction: MermaidDirection,
-  ): void {
+  ): Map<string, ClusterBounds> {
+    const clusterBounds = new Map<string, ClusterBounds>();
+
     const nodeLookup = new Map<string, { x: number; y: number }>();
     for (const [originalId, svgElId] of idMap.entries()) {
       const pos = svgPositions.nodePositions.get(svgElId);
@@ -834,13 +830,16 @@ export class MermaidParser {
       }
     }
 
-    if (!isFinite(rawMinX)) return;
+    if (!isFinite(rawMinX)) return clusterBounds;
 
+    // Non-uniform scaling: flow direction fits TARGET_MAX_EXTENT, cross direction
+    // gets a minimum extent to prevent excessive compression of narrow layouts.
     const TARGET_MAX_EXTENT = 50;
+    const MIN_CROSS_EXTENT = 25;
     const rawExtentX = rawMaxX - rawMinX;
     const rawExtentZ = rawMaxZ - rawMinZ;
-    const rawExtent = Math.max(rawExtentX, rawExtentZ, 1);
-    const SCALE = Math.min(0.8, TARGET_MAX_EXTENT / rawExtent);
+    const flowScale = Math.min(0.8, TARGET_MAX_EXTENT / Math.max(rawExtentX, 1));
+    const crossScale = Math.min(0.8, Math.max(MIN_CROSS_EXTENT, TARGET_MAX_EXTENT * 0.5) / Math.max(rawExtentZ, 1));
 
     const rawCX = (rawMinX + rawMaxX) / 2;
     const rawCZ = (rawMinZ + rawMaxZ) / 2;
@@ -848,11 +847,31 @@ export class MermaidParser {
     for (const node of nodes) {
       const raw = rawPositions.get(node.id);
       if (raw) {
-        node.x = (raw.x - rawCX) * SCALE;
-        node.z = (raw.z - rawCZ) * SCALE;
+        node.x = (raw.x - rawCX) * flowScale;
+        node.z = (raw.z - rawCZ) * crossScale;
         node.y = 0;
       }
     }
+
+    // Compute cluster bounds from SVG cluster rects with the same scaling.
+    // This preserves the 2D diagram's cluster proportions in 3D.
+    for (const [originalId, svgElId] of idMap.entries()) {
+      const clusterPos = svgPositions.clusterPositions.get(svgElId);
+      if (!clusterPos) continue;
+
+      const { x: cCX, z: cCZ } = this._svgPointToFlowPosition(clusterPos, direction);
+      const halfW = (direction === 'LR' || direction === 'RL' ? clusterPos.width : clusterPos.height) / 2;
+      const halfH = (direction === 'LR' || direction === 'RL' ? clusterPos.height : clusterPos.width) / 2;
+
+      clusterBounds.set(originalId, {
+        minX: (cCX - halfW - rawCX) * flowScale,
+        maxX: (cCX + halfW - rawCX) * flowScale,
+        minZ: (cCZ - halfH - rawCZ) * crossScale,
+        maxZ: (cCZ + halfH - rawCZ) * crossScale,
+      });
+    }
+
+    return clusterBounds;
   }
 
   private _svgPointToFlowPosition(svgPos: SvgNodePosition, direction: MermaidDirection): FlowPosition {
