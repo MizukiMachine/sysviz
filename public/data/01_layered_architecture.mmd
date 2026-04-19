@@ -1,0 +1,118 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#AED6F1',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
+flowchart TB
+    subgraph WSGI["WSGI Layer / WSGI層"]
+        direction TB
+        Flask["[Core] Flask<br/>Main WSGI Application<br/>メインWSGIアプリケーション"]
+        Wrappers["[I/O] Request / Response<br/>WSGI Wrappers<br/>WSGIラッパー"]
+        Call["[I/O] __call__<br/>WSGI Entry Point<br/>WSGIエントリポイント"]
+        Run["[I/O] run()<br/>Development Server<br/>開発サーバー"]
+    end
+
+    subgraph SANSIO["SANSIO Layer / I/O非依存層"]
+        direction TB
+        SansioApp["[Core] App<br/>Application Base<br/>アプリケーション基底クラス"]
+        SansioBP["[Core] Blueprint<br/>Blueprint Base<br/>ブループリント基底クラス"]
+        Scaffold["[Core] Scaffold<br/>Shared Foundation<br/>共通基盤クラス"]
+        Router["[Core] Router<br/>URL Rule Management<br/>URLルール管理"]
+        SetupMethod["[Core] @setupmethod<br/>Setup State Guard<br/>セットアップ状態ガード"]
+    end
+
+    subgraph Infra["Infrastructure Layer / インフラ層"]
+        direction TB
+        Ctx["[Infra] ctx.py<br/>Context Management<br/>コンテキスト管理"]
+        Globals["[Infra] globals.py<br/>ContextVar + LocalProxy<br/>コンテキスト変数"]
+        Config["[Infra] config.py<br/>Configuration System<br/>設定システム"]
+        Sessions["[Infra] sessions.py<br/>Secure Cookie Sessions<br/>セキュアクッキーセッション"]
+        Cli["[Infra] cli.py<br/>CLI Integration<br/>CLI統合"]
+    end
+
+    subgraph Features["Feature Layer / 機能層"]
+        direction TB
+        Templating["[Feature] templating.py<br/>Jinja2 Integration<br/>テンプレート統合"]
+        Helpers["[Feature] helpers.py<br/>URL / Response Helpers<br/>URL/レスポンスヘルパー"]
+        Views["[Feature] views.py<br/>View / MethodView<br/>ビュークラス"]
+        Testing["[Feature] testing.py<br/>Test Client<br/>テストクライアント"]
+        Json["[Feature] json/<br/>JSON Provider<br/>JSONプロバイダー"]
+        Signals["[Feature] signals.py<br/>Blinker Signals<br/>シグナルシステム"]
+    end
+
+    subgraph External["External Dependencies / 外部依存"]
+        Werkzeug["[Lib] Werkzeug<br/>WSGI Utilities<br/>WSGIユーティリティ"]
+        Jinja2["[Lib] Jinja2<br/>Template Engine<br/>テンプレートエンジン"]
+        Click["[Lib] Click<br/>CLI Framework<br/>CLIフレームワーク"]
+        Blinker["[Lib] Blinker<br/>Signal Support<br/>シグナルサポート"]
+        ItsDangerous["[Lib] ItsDangerous<br/>Data Signing<br/>データ署名"]
+    end
+
+    %% WSGI Layer depends on SANSIO
+    Flask --> SansioApp
+    Call --> Flask
+    Run --> Flask
+    Wrappers --> Werkzeug
+
+    %% SANSIO Layer inheritance
+    SansioApp --> Scaffold
+    SansioBP --> Scaffold
+    SetupMethod --> Scaffold
+    Router --> Scaffold
+
+    %% Infrastructure serves all layers
+    Ctx --> Globals
+    Flask --> Ctx
+    Flask --> Config
+    Flask --> Sessions
+    Flask --> Cli
+
+    %% Feature modules
+    Flask --> Templating
+    Templating --> Jinja2
+    Flask --> Helpers
+    Flask --> Views
+    Flask --> Testing
+    Flask --> Json
+    Flask --> Signals
+    Signals --> Blinker
+    Sessions --> ItsDangerous
+    Cli --> Click
+
+    %% Styles
+    style WSGI fill:#F5B7B1,stroke:#D98880,color:#333
+    style SANSIO fill:#A9DFBF,stroke:#52BE80,color:#333
+    style Infra fill:#AED6F1,stroke:#5DADE2,color:#333
+    style Features fill:#FAD7A0,stroke:#C68A00,color:#333
+    style External fill:#D5DBDB,stroke:#85929E,color:#333
+
+    style Flask fill:#F5B7B1,stroke:#D98880,color:#333
+    style Wrappers fill:#F5B7B1,stroke:#D98880,color:#333
+    style Call fill:#F5B7B1,stroke:#D98880,color:#333
+    style Run fill:#F5B7B1,stroke:#D98880,color:#333
+
+    style SansioApp fill:#A9DFBF,stroke:#52BE80,color:#333
+    style SansioBP fill:#A9DFBF,stroke:#52BE80,color:#333
+    style Scaffold fill:#A9DFBF,stroke:#52BE80,color:#333
+    style Router fill:#A9DFBF,stroke:#52BE80,color:#333
+    style SetupMethod fill:#A9DFBF,stroke:#52BE80,color:#333
+
+    style Ctx fill:#AED6F1,stroke:#5DADE2,color:#333
+    style Globals fill:#AED6F1,stroke:#5DADE2,color:#333
+    style Config fill:#AED6F1,stroke:#5DADE2,color:#333
+    style Sessions fill:#AED6F1,stroke:#5DADE2,color:#333
+    style Cli fill:#AED6F1,stroke:#5DADE2,color:#333
+
+    style Templating fill:#FAD7A0,stroke:#C68A00,color:#333
+    style Helpers fill:#FAD7A0,stroke:#C68A00,color:#333
+    style Views fill:#FAD7A0,stroke:#C68A00,color:#333
+    style Testing fill:#FAD7A0,stroke:#C68A00,color:#333
+    style Json fill:#FAD7A0,stroke:#C68A00,color:#333
+    style Signals fill:#FAD7A0,stroke:#C68A00,color:#333
+
+    style Werkzeug fill:#D5DBDB,stroke:#85929E,color:#333
+    style Jinja2 fill:#D5DBDB,stroke:#85929E,color:#333
+    style Click fill:#D5DBDB,stroke:#85929E,color:#333
+    style Blinker fill:#D5DBDB,stroke:#85929E,color:#333
+    style ItsDangerous fill:#D5DBDB,stroke:#85929E,color:#333

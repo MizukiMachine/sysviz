@@ -223,9 +223,27 @@ export class MermaidParser {
     let currentSubgraph: string | null = null;
     let sgOrder = 0;
 
+    // Track init directive block: %%{init...}%% spans multiple lines.
+    // Any line inside such a block should be skipped.
+    let inInitBlock = false;
     for (const line of lines) {
       const t = line.trim();
-      if (!t || t.startsWith('%%')) continue;
+      if (!t) continue;
+
+      // Handle %%{init...}%% multi-line directive block
+      if (t.startsWith('%%{') && t.endsWith('}%%')) {
+        // Single-line init directive
+        continue;
+      }
+      if (t.startsWith('%%{')) {
+        inInitBlock = true;
+        continue;
+      }
+      if (inInitBlock) {
+        if (t.endsWith('}%%')) inInitBlock = false;
+        continue;
+      }
+      if (t.startsWith('%%')) continue;
 
       const dirM = t.match(/^flowchart\s+(LR|TB|BT|RL)$/);
       if (dirM) {
@@ -245,6 +263,14 @@ export class MermaidParser {
         continue;
       }
 
+      // subgraph-local direction directive: "direction LR|TB|BT|RL"
+      // dagre compound mode doesn't support per-subgraph rankdir,
+      // so we parse and ignore these to avoid silent skipping.
+      const sgDirM = t.match(/^direction\s+(LR|TB|BT|RL)$/);
+      if (sgDirM) {
+        continue;
+      }
+
       const stM = t.match(/^style\s+(\w+)\s+fill:(#[0-9A-Fa-f]{6})/);
       if (stM) {
         styles.set(stM[1], stM[2]);
@@ -260,13 +286,26 @@ export class MermaidParser {
         const targetId = edgeM[6];
         const targetLabel = edgeM[7] !== undefined ? edgeM[7] : edgeM[8];
 
-        this._registerInlineNode(rawNodes, sourceId, sourceLabel);
-        this._registerInlineNode(rawNodes, targetId, targetLabel);
+        // Skip subgraph-to-subgraph edges (e.g. "PublicAPI --> Core" in component diagrams).
+        // A bare subgraph ID (no label annotation) that matches a known subgraph is a cluster
+        // reference, not a real node.  Including them creates phantom nodes and layout errors.
+        const isSourceCluster = subgraphs.has(sourceId) && sourceLabel === undefined;
+        const isTargetCluster = subgraphs.has(targetId) && targetLabel === undefined;
+        if (isSourceCluster && isTargetCluster) continue;
+
+        if (!isSourceCluster) this._registerInlineNode(rawNodes, sourceId, sourceLabel);
+        if (!isTargetCluster) this._registerInlineNode(rawNodes, targetId, targetLabel);
+
+        // Strip surrounding double quotes from pipe-style labels (e.g. |"extends"|)
+        let cleanLabel: string | null = edgeLabel ? edgeLabel.trim() : null;
+        if (cleanLabel && cleanLabel.startsWith('"') && cleanLabel.endsWith('"')) {
+          cleanLabel = cleanLabel.slice(1, -1);
+        }
 
         rawConnections.push({
           source: sourceId,
           target: targetId,
-          label: edgeLabel ? edgeLabel.trim() : null,
+          label: cleanLabel,
           lineStyle: lineStyle || '-->',
         });
 
@@ -477,31 +516,50 @@ export class MermaidParser {
     nodes: MermaidNode[],
     connections: MermaidConnection[],
     direction: MermaidDirection,
-    _subgraphs: Map<string, VisualizationSubgraph>,
-    _nodeSubgraphs: Map<string, string>,
+    subgraphs: Map<string, VisualizationSubgraph>,
+    nodeSubgraphs: Map<string, string>,
   ): void {
     if (nodes.length === 0) return;
 
-    const g = new dagre.graphlib.Graph();
-    g.setGraph({ rankdir: direction, nodesep: 3, ranksep: 5, marginx: 1, marginy: 1 });
+    const g = new dagre.graphlib.Graph({ compound: true });
+    // Use moderate spacing that works well for both small and large compound graphs.
+    // nodesep/ranksep are in dagre coordinate units; the final SCALE in _layoutFlat
+    // maps these to 3D world units. Keeping them moderate avoids overly spread layouts
+    // for dense graphs (e.g. 02_component.mmd with 30+ nodes in 12 subgraphs).
+    g.setGraph({ rankdir: direction, nodesep: 3, ranksep: 4, marginx: 2, marginy: 2 });
     g.setDefaultEdgeLabel(() => ({}));
+    // Register subgraph cluster nodes with minimal padding so dagre
+    // allocates space around grouped children instead of collapsing them.
+    for (const [sgId] of subgraphs) {
+      g.setNode(sgId, { width: 10, height: 10 });
+    }
     for (const node of nodes) {
       const size = SHAPE_DAGRE_SIZES[node.shape] || SHAPE_DAGRE_SIZES.default;
       g.setNode(node.id, { width: size.width, height: size.height });
     }
+    for (const [nodeId, sgId] of nodeSubgraphs) {
+      g.setParent(nodeId, sgId);
+    }
     for (const conn of connections) {
       g.setEdge(conn.sourceId, conn.targetId);
     }
-    dagre.layout(g);
-
-    // Build adjacency maps
-    const outMap = new Map<string, string[]>();
-    const inMap = new Map<string, string[]>();
-    for (const conn of connections) {
-      if (!outMap.has(conn.sourceId)) outMap.set(conn.sourceId, []);
-      outMap.get(conn.sourceId)!.push(conn.targetId);
-      if (!inMap.has(conn.targetId)) inMap.set(conn.targetId, []);
-      inMap.get(conn.targetId)!.push(conn.sourceId);
+    try {
+      dagre.layout(g);
+    } catch (_e) {
+      // dagre throws on cyclic graphs. Retry with greedy acyclicer
+      // which breaks cycles by reversing some edges instead of failing.
+      g.setGraph({ ...g.graph(), acyclicer: 'greedy' });
+      try {
+        dagre.layout(g);
+      } catch {
+        // Still failing — fall back to a simple linear layout along X.
+        for (let i = 0; i < nodes.length; i++) {
+          nodes[i].x = (i - (nodes.length - 1) / 2) * 5;
+          nodes[i].z = 0;
+          nodes[i].y = 0;
+        }
+        return;
+      }
     }
 
     // Dagre positions
@@ -512,163 +570,91 @@ export class MermaidParser {
       if (dn) dagrePos.set(node.id, dn);
     }
 
-    // Find main path (longest source→sink)
-    const sources = nodes
-      .filter(n => !inMap.has(n.id) || inMap.get(n.id)!.length === 0)
-      .map(n => n.id);
-    const mainPath = this._findLongestPath(sources, outMap);
-    const mainPathSet = new Set(mainPath);
-
-    // Sort main path by dagre X
-    const mainPathSorted = [...mainPath].sort(
-      (a, b) => (dagrePos.get(a)?.x ?? 0) - (dagrePos.get(b)?.x ?? 0),
-    );
-
-    // Classify branch nodes (rejoin → behind z, dead-end → above y)
-    const branchInfo = this._classifyBranches(nodes, mainPathSet, outMap);
-
-    // Layout constants
-    const X_STEP = 5;
-    const BRANCH_Z = -6;
-    const BRANCH_Y_UP = 4;
-    const BASE_Y = 1.2;
-
-    // Place main path nodes
-    const nodeMap = new Map(nodes.map(n => [n.id, n]));
-    for (let i = 0; i < mainPathSorted.length; i++) {
-      const node = nodeMap.get(mainPathSorted[i])!;
-      node.x = i * X_STEP;
-      node.y = BASE_Y;
-      node.z = 0;
-    }
-
-    // Place branch nodes — at their branch point's X position
-    for (const node of nodes) {
-      if (mainPathSet.has(node.id)) continue;
-
-      // Find branch point (nearest main-path ancestor via BFS)
-      const branchPoint = this._findBranchPoint(node.id, mainPathSet, inMap);
-      const bpNode = branchPoint ? nodeMap.get(branchPoint) : null;
-      node.x = bpNode ? bpNode.x : 0;
-
-      const info = branchInfo.get(node.id);
-      if (info?.type === 'dead-end') {
-        node.y = BASE_Y + BRANCH_Y_UP * info.depth;
-        node.z = 0;
-      } else {
-        node.y = BASE_Y;
-        node.z = info ? BRANCH_Z * info.depth : 0;
-      }
-    }
-
-    // Center on main path
-    if (mainPathSorted.length > 0) {
-      const cx = ((mainPathSorted.length - 1) * X_STEP) / 2;
-      for (const node of nodes) node.x -= cx;
-    }
+    this._layoutFlat(nodes, dagrePos, direction);
   }
 
-  _findLongestPath(
-    sources: string[],
-    outMap: Map<string, string[]>,
-  ): string[] {
-    const memo = new Map<string, { length: number; path: string[] }>();
-    const computing = new Set<string>();
-
-    const dfs = (nodeId: string): { length: number; path: string[] } => {
-      if (memo.has(nodeId)) return memo.get(nodeId)!;
-      if (computing.has(nodeId)) return { length: 0, path: [] };
-      computing.add(nodeId);
-
-      const targets = outMap.get(nodeId) || [];
-      let best: { length: number; path: string[] } = { length: 0, path: [] };
-      for (const target of targets) {
-        const sub = dfs(target);
-        if (sub.length > best.length) best = sub;
-      }
-
-      computing.delete(nodeId);
-      const result = { length: best.length + 1, path: [nodeId, ...best.path] };
-      memo.set(nodeId, result);
-      return result;
-    };
-
-    let longestPath: string[] = [];
-    for (const source of sources) {
-      const result = dfs(source);
-      if (result.path.length > longestPath.length) longestPath = result.path;
-    }
-    return longestPath;
-  }
-
-  _findBranchPoint(
-    nodeId: string,
-    mainPathSet: Set<string>,
-    inMap: Map<string, string[]>,
-  ): string | null {
-    const visited = new Set<string>();
-    const queue: string[] = [...(inMap.get(nodeId) || [])];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      if (visited.has(current)) continue;
-      visited.add(current);
-      if (mainPathSet.has(current)) return current;
-      queue.push(...(inMap.get(current) || []));
-    }
-    return null;
-  }
-
-  _classifyBranches(
+  _layoutFlat(
     nodes: MermaidNode[],
-    mainPathSet: Set<string>,
-    outMap: Map<string, string[]>,
-  ): Map<string, { type: 'rejoin' | 'dead-end'; depth: number }> {
-    const result = new Map<string, { type: 'rejoin' | 'dead-end'; depth: number }>();
-    const cache = new Map<string, boolean>();
+    dagrePos: Map<string, { x: number; y: number }>,
+    direction: MermaidDirection,
+  ): void {
+    // Design rule: X-axis = flow direction in 3D space.
+    // dagre maps flow differently per rankdir:
+    //   LR: flow = dagre.x, cross = dagre.y
+    //   RL: flow = dagre.x (reversed), cross = dagre.y
+    //   TB: flow = dagre.y, cross = dagre.x
+    //   BT: flow = dagre.y (reversed), cross = dagre.x
+    const isFlowHorizontal = direction === 'LR' || direction === 'RL';
 
-    const reachesMain = (nodeId: string, visited: Set<string>): boolean => {
-      if (mainPathSet.has(nodeId)) return true;
-      if (cache.has(nodeId)) return cache.get(nodeId)!;
-      if (visited.has(nodeId)) return false;
-      visited.add(nodeId);
-
-      for (const target of (outMap.get(nodeId) || [])) {
-        if (reachesMain(target, visited)) {
-          cache.set(nodeId, true);
-          return true;
-        }
-      }
-      cache.set(nodeId, false);
-      return false;
-    };
+    // First pass: compute raw 3D positions and the extent to determine adaptive scale.
+    const rawPositions = new Map<string, { x: number; z: number }>();
+    let rawMinX = Infinity;
+    let rawMaxX = -Infinity;
+    let rawMinZ = Infinity;
+    let rawMaxZ = -Infinity;
 
     for (const node of nodes) {
-      if (mainPathSet.has(node.id)) continue;
-      const reaches = reachesMain(node.id, new Set());
-      result.set(node.id, { type: reaches ? 'rejoin' : 'dead-end', depth: 1 });
+      const dp = dagrePos.get(node.id);
+      if (dp) {
+        const r3x = isFlowHorizontal ? dp.x : dp.y;
+        const r3z = isFlowHorizontal ? dp.y : dp.x;
+        rawPositions.set(node.id, { x: r3x, z: r3z });
+        rawMinX = Math.min(rawMinX, r3x);
+        rawMaxX = Math.max(rawMaxX, r3x);
+        rawMinZ = Math.min(rawMinZ, r3z);
+        rawMaxZ = Math.max(rawMaxZ, r3z);
+      }
     }
-    return result;
+
+    // Adaptive scale: fit the graph into a reasonable world-space bounding box.
+    // Target maximum extent of ~50 world units so the camera (FOV 45) can frame it.
+    const TARGET_MAX_EXTENT = 50;
+    const rawExtentX = rawMaxX - rawMinX;
+    const rawExtentZ = rawMaxZ - rawMinZ;
+    const rawExtent = Math.max(rawExtentX, rawExtentZ, 1);
+    const SCALE = Math.min(0.8, TARGET_MAX_EXTENT / rawExtent);
+
+    // Second pass: apply scale and center at origin.
+    const rawCX = (rawMinX + rawMaxX) / 2;
+    const rawCZ = (rawMinZ + rawMaxZ) / 2;
+
+    for (const node of nodes) {
+      const raw = rawPositions.get(node.id);
+      if (raw) {
+        node.x = (raw.x - rawCX) * SCALE;
+        node.z = (raw.z - rawCZ) * SCALE;
+        node.y = 0;
+      }
+    }
   }
 
-  _extractLayers(nodes: MermaidNode[], direction: MermaidDirection): string[][] {
-    const isLR = direction === 'LR' || direction === 'RL';
-    const sorted = [...nodes].sort((a, b) => {
-      const aFlow = isLR ? a.x : a.z;
-      const bFlow = isLR ? b.x : b.z;
-      return aFlow - bFlow;
-    });
+  _extractLayers(nodes: MermaidNode[], _direction: MermaidDirection): string[][] {
+    // Flow direction is always X-axis in 3D space (design rule).
+    // Sort by X to get execution order, then group nodes with similar X into layers.
+    const sorted = [...nodes].sort((a, b) => a.x - b.x);
+
+    if (sorted.length === 0) return [];
+
+    // Compute tolerance dynamically from actual node spacing:
+    // 40% of the minimum inter-node gap along X. Falls back to a sensible
+    // default if all nodes share the same X position (single-rank graph).
+    const flowPositions = sorted.map((n) => n.x);
+    let minGap = Infinity;
+    for (let i = 1; i < flowPositions.length; i++) {
+      const gap = flowPositions[i] - flowPositions[i - 1];
+      if (gap > 0 && gap < minGap) minGap = gap;
+    }
+    const TOLERANCE = isFinite(minGap) ? minGap * 0.4 : 1.8;
 
     const layers: string[][] = [];
     let currentLayer: string[] = [];
     let currentFlowPos: number | null = null;
-    const TOLERANCE = 1.0;
 
     for (const node of sorted) {
-      const flowPos = isLR ? node.x : node.z;
-      if (currentFlowPos === null || Math.abs(flowPos - currentFlowPos) > TOLERANCE) {
+      if (currentFlowPos === null || Math.abs(node.x - currentFlowPos) > TOLERANCE) {
         if (currentLayer.length > 0) layers.push(currentLayer);
         currentLayer = [node.id];
-        currentFlowPos = flowPos;
+        currentFlowPos = node.x;
       } else {
         currentLayer.push(node.id);
       }
@@ -716,15 +702,41 @@ export class MermaidParser {
     }
     let minX = Infinity;
     let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
     for (const node of nodes) {
       minX = Math.min(minX, node.x);
       maxX = Math.max(maxX, node.x);
+      minZ = Math.min(minZ, node.z);
+      maxZ = Math.max(maxZ, node.z);
     }
     const cx = (minX + maxX) / 2;
-    const spread = Math.max(maxX - minX, 10);
+    const cz = (minZ + maxZ) / 2;
+    const spreadX = maxX - minX;
+    const spreadZ = maxZ - minZ;
+
+    // Derive camera distance from graph extents.
+    // With FOV=45deg the visible half-height at distance d is d * tan(22.5deg).
+    // We need the camera far enough that the graph fits with comfortable padding.
+    const FOV_DEG = 45;
+    const halfFovRad = (FOV_DEG / 2) * (Math.PI / 180);
+    const tanHalf = Math.tan(halfFovRad);
+    // Add generous padding so subgraph labels and node labels are also visible.
+    const PADDED_X = Math.max(spreadX + 8, 12);
+    const PADDED_Z = Math.max(spreadZ + 8, 12);
+    // Distance needed to fit each dimension (accounting for ~1.5 aspect ratio viewport)
+    const distForX = (PADDED_X / 1.5) / tanHalf;
+    const distForZ = PADDED_Z / tanHalf;
+    const dist = Math.max(distForX, distForZ, 15);
+
+    // Position camera behind and above center, looking down at ~35 degree angle
+    const ELEVATION_ANGLE = 35 * (Math.PI / 180);
+    const camY = dist * Math.sin(ELEVATION_ANGLE) + 2;
+    const camOffsetZ = dist * Math.cos(ELEVATION_ANGLE);
+
     return {
-      position: [cx, spread * 0.5 + 1.5, spread * 0.55],
-      target: [cx, 0, 0],
+      position: [cx, camY, cz + camOffsetZ],
+      target: [cx, 0, cz],
     };
   }
 

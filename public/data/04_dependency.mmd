@@ -1,0 +1,110 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#AED6F1',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
+flowchart BT
+    subgraph ExternalLibs["External Libraries / 外部ライブラリ"]
+        Werkzeug["[Lib] Werkzeug >= 3.1<br/>WSGI Server, Routing, HTTP<br/>WSGIサーバー・ルーティング・HTTP"]
+        Jinja2["[Lib] Jinja2 >= 3.1<br/>Template Engine<br/>テンプレートエンジン"]
+        Click["[Lib] Click >= 8.1<br/>CLI Framework<br/>CLIフレームワーク"]
+        Blinker["[Lib] Blinker >= 1.9<br/>Signal Dispatch<br/>シグナルディスパッチ"]
+        ItsDangerous["[Lib] ItsDangerous >= 2.2<br/>Cryptographic Signing<br/>暗号署名"]
+        MarkupSafe["[Lib] MarkupSafe >= 2.1<br/>HTML Escaping<br/>HTMLエスケープ"]
+        DotEnv["[Opt] python-dotenv<br/>Environment Loading<br/>環境変数読み込み"]
+        ASGIRef["[Opt] asgiref >= 3.2<br/>ASGI Support<br/>ASGIサポート"]
+    end
+
+    subgraph FlaskCore["Flask Core / Flaskコア"]
+        app["[Core] app.py<br/>Flask Class, WSGI Handler<br/>Flaskクラス・WSGIハンドラ"]
+        sansio_app["[Base] sansio/app.py<br/>App Base Class<br/>App基底クラス"]
+        sansio_bp["[Base] sansio/blueprints.py<br/>Blueprint Base Class<br/>Blueprint基底クラス"]
+        scaffold["[Base] sansio/scaffold.py<br/>Scaffold Base Class<br/>Scaffold基底クラス"]
+    end
+
+    subgraph FlaskModules["Flask Modules / Flaskモジュール"]
+        ctx["[Ctx] ctx.py<br/>AppContext Management<br/>AppContext管理"]
+        globals["[Ctx] globals.py<br/>LocalProxy, ContextVar<br/>ローカルプロキシ"]
+        config["[Config] config.py<br/>Config, ConfigAttribute<br/>設定クラス"]
+        wrappers["[I/O] wrappers.py<br/>Request, Response<br/>リクエスト・レスポンス"]
+        helpers["[Helper] helpers.py<br/>url_for, redirect, abort<br/>ヘルパー関数"]
+        templating["[Template] templating.py<br/>Jinja2 Integration<br/>Jinja2統合"]
+        sessions["[Session] sessions.py<br/>SecureCookieSession<br/>セキュアクッキーセッション"]
+        cli["[CLI] cli.py<br/>FlaskGroup, Commands<br/>CLIコマンド"]
+        views["[View] views.py<br/>View, MethodView<br/>ビュークラス"]
+        testing["[Test] testing.py<br/>FlaskClient<br/>テストクライアント"]
+        signals_mod["[Signal] signals.py<br/>Signal Definitions<br/>シグナル定義"]
+    end
+
+    subgraph FlaskJSON["Flask JSON / Flask JSON処理"]
+        json_provider["[JSON] json/provider.py<br/>DefaultJSONProvider<br/>デフォルトJSONプロバイダー"]
+        json_tag["[JSON] json/tag.py<br/>TaggedJSONSerializer<br/>タグ付きJSONシリアライザ"]
+    end
+
+    %% Flask core inheritance
+    app --> sansio_app
+    sansio_app --> scaffold
+    sansio_bp --> scaffold
+
+    %% Flask modules depend on core
+    ctx --> app
+    ctx --> globals
+    helpers --> app
+    templating --> app
+    sessions --> app
+    cli --> app
+    views --> sansio_app
+    testing --> app
+    signals_mod --> app
+
+    %% Internal module dependencies
+    config --> scaffold
+    wrappers -->|"extends"| Werkzeug
+    templating -->|"uses"| Jinja2
+    cli -->|"uses"| Click
+    signals_mod -->|"uses"| Blinker
+    sessions -->|"uses"| ItsDangerous
+    sessions -->|"uses"| json_tag
+    json_tag --> MarkupSafe
+    helpers --> MarkupSafe
+    globals -->|"uses"| Werkzeug
+
+    %% Optional
+    DotEnv -.->|"optional"| config
+    ASGIRef -.->|"optional"| app
+
+    %% Styles
+    style ExternalLibs fill:#D5DBDB,stroke:#85929E,color:#333
+    style FlaskCore fill:#AED6F1,stroke:#5DADE2,color:#333
+    style FlaskModules fill:#FAD7A0,stroke:#C68A00,color:#333
+    style FlaskJSON fill:#F9E79F,stroke:#D4AC00,color:#333
+
+    style Werkzeug fill:#BDC3C7,stroke:#85929E,color:#333
+    style Jinja2 fill:#BDC3C7,stroke:#85929E,color:#333
+    style Click fill:#BDC3C7,stroke:#85929E,color:#333
+    style Blinker fill:#BDC3C7,stroke:#85929E,color:#333
+    style ItsDangerous fill:#BDC3C7,stroke:#85929E,color:#333
+    style MarkupSafe fill:#BDC3C7,stroke:#85929E,color:#333
+    style DotEnv fill:#E8DAEF,stroke:#8E44AD,color:#333
+    style ASGIRef fill:#E8DAEF,stroke:#8E44AD,color:#333
+
+    style app fill:#7FB3D0,stroke:#5DADE2,color:#333
+    style sansio_app fill:#7FB3D0,stroke:#5DADE2,color:#333
+    style sansio_bp fill:#7FB3D0,stroke:#5DADE2,color:#333
+    style scaffold fill:#7FB3D0,stroke:#5DADE2,color:#333
+
+    style ctx fill:#FAD7A0,stroke:#C68A00,color:#333
+    style globals fill:#FAD7A0,stroke:#C68A00,color:#333
+    style config fill:#FAD7A0,stroke:#C68A00,color:#333
+    style wrappers fill:#FAD7A0,stroke:#C68A00,color:#333
+    style helpers fill:#FAD7A0,stroke:#C68A00,color:#333
+    style templating fill:#FAD7A0,stroke:#C68A00,color:#333
+    style sessions fill:#FAD7A0,stroke:#C68A00,color:#333
+    style cli fill:#FAD7A0,stroke:#C68A00,color:#333
+    style views fill:#FAD7A0,stroke:#C68A00,color:#333
+    style testing fill:#FAD7A0,stroke:#C68A00,color:#333
+    style signals_mod fill:#FAD7A0,stroke:#C68A00,color:#333
+
+    style json_provider fill:#F9E79F,stroke:#D4AC00,color:#333
+    style json_tag fill:#F9E79F,stroke:#D4AC00,color:#333

@@ -4,6 +4,8 @@ declare module 'dagre' {
       setGraph(label?: any): Graph;
       setDefaultEdgeLabel(label: any): Graph;
       setNode(node: string, label?: any): Graph;
+      setParent(v: string, parent?: string): Graph;
+      parent(v: string): string | undefined;
       setEdge(source: string, target: string, label?: any): Graph;
       node(node: string): any;
       edge(source: string, target: string): any;
@@ -24,6 +26,7 @@ declare module 'dagre' {
     edgesep?: number;
     marginx?: number;
     marginy?: number;
+    acyclicer?: undefined | 'greedy';
   }
 
   export function layout(g: graphlib.Graph, options?: LayoutOptions): void;

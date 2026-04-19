@@ -1,0 +1,113 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#AED6F1',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
+flowchart TB
+    subgraph PublicAPI["Public API / 公開API<br/>flask.*"]
+        direction LR
+        abort["abort()"]
+        redirect["redirect()"]
+        url_for["url_for()"]
+        jsonify["jsonify()"]
+        render_template["render_template()"]
+        flash["flash()"]
+        make_response["make_response()"]
+    end
+
+    subgraph Core["Core Application / コアアプリケーション"]
+        direction TB
+        FlaskClass["[Core] Flask<br/>Application Factory & WSGI<br/>アプリケーションファクトリ"]
+        BP["[Core] Blueprint<br/>Application Modules<br/>アプリケーションモジュール"]
+        ConfigClass["[Core] Config<br/>dict subclass<br/>設定クラス"]
+    end
+
+    subgraph Sansio["SANSIO Core / SANSIOコア<br/>I/O非依存ロジック"]
+        direction TB
+        SansioAppClass["[Base] App<br/>Routing, Hooks, Error Handlers<br/>ルーティング・フック・エラーハンドラ"]
+        SansioBPClass["[Base] Blueprint<br/>Deferred Registration<br/>遅延登録"]
+        ScaffoldClass["[Base] Scaffold<br/>Shared Behavior<br/>共通動作"]
+    end
+
+    subgraph Context["Context Management / コンテキスト管理"]
+        direction TB
+        AppCtx["[Ctx] AppContext<br/>App + Request Context<br/>アプリ+リクエストコンテキスト"]
+        LocalProxy["[Ctx] LocalProxy<br/>current_app, g, request, session<br/>プロキシオブジェクト"]
+    end
+
+    subgraph RequestResponse["Request / Response / リクエスト・レスポンス"]
+        direction TB
+        Req["[I/O] Request<br/>werkzeug.wrappers.Request<br/>リクエストラッパー"]
+        Res["[I/O] Response<br/>werkzeug.wrappers.Response<br/>レスポンスラッパー"]
+    end
+
+    subgraph TemplateEngine["Template Engine / テンプレートエンジン"]
+        direction TB
+        JinjaEnv["[Template] Environment<br/>Custom Jinja2 Env<br/>カスタムJinja2環境"]
+        DispatchLoader["[Template] DispatchingJinjaLoader<br/>App + Blueprint Templates<br/>マルチローダー"]
+    end
+
+    subgraph SessionManagement["Session / セッション管理"]
+        direction TB
+        SecureSession["[Session] SecureCookieSession<br/>Signed Cookie Sessions<br/>署名付きCookie"]
+        SessionInterface["[Session] SessionInterface<br/>Open / Save Hooks<br/>セッションライフサイクル"]
+    end
+
+    subgraph JSONHandling["JSON / JSON処理"]
+        direction TB
+        JsonProvider["[JSON] DefaultJSONProvider<br/>Serialization / Deserialization<br/>シリアライズ"]
+        Tag["[JSON] TaggedJSONSerializer<br/>Session Serialization<br/>セッションシリアライズ"]
+    end
+
+    subgraph CLI["CLI / コマンドライン"]
+        direction TB
+        FlaskCLI["[CLI] FlaskGroup<br/>Click Command Group<br/>Clickコマンドグループ"]
+        RunCmd["[CLI] run command<br/>Development Server<br/>開発サーバー"]
+        ShellCmd["[CLI] shell command<br/>Interactive Shell<br/>インタラクティブシェル"]
+    end
+
+    subgraph TestingSupport["Testing / テスト支援"]
+        direction TB
+        TestClient["[Test] FlaskClient<br/>Test Request Context<br/>テストリクエストコンテキスト"]
+        CLIRunner["[Test] FlaskCliRunner<br/>CLI Test Runner<br/>CLIテストランナー"]
+    end
+
+    subgraph Signals["Signals / シグナル"]
+        direction TB
+        ReqSignals["[Signal] request_started<br/>request_finished<br/>リクエストライフサイクル"]
+        AppSignals["[Signal] appcontext_pushed<br/>appcontext_popped<br/>アプリコンテキストライフサイクル"]
+    end
+
+    %% Relationships
+    PublicAPI --> Core
+    Core --> Sansio
+    Core --> Context
+    Core --> RequestResponse
+    Core --> TemplateEngine
+    Core --> SessionManagement
+    Core --> JSONHandling
+    Core --> CLI
+    Core --> TestingSupport
+    Core --> Signals
+    Context --> LocalProxy
+    SessionManagement --> JSONHandling
+    CLI --> FlaskCLI
+    TestingSupport --> TestClient
+
+    %% Styles
+    style PublicAPI fill:#5D6D7E,stroke:#4A4D60,color:#fff
+    style Core fill:#AED6F1,stroke:#5DADE2,color:#333
+    style Sansio fill:#A9DFBF,stroke:#52BE80,color:#333
+    style Context fill:#A3E4D7,stroke:#48C9B0,color:#333
+    style RequestResponse fill:#F5B7B1,stroke:#D98880,color:#333
+    style TemplateEngine fill:#FAD7A0,stroke:#C68A00,color:#333
+    style SessionManagement fill:#D7BDE2,stroke:#8E44AD,color:#333
+    style JSONHandling fill:#F9E79F,stroke:#D4AC00,color:#333
+    style CLI fill:#AED6F1,stroke:#5DADE2,color:#333
+    style TestingSupport fill:#A9DFBF,stroke:#52BE80,color:#333
+    style Signals fill:#F5CBA7,stroke:#E67E22,color:#333
+
+    style FlaskClass fill:#7FB3D0,stroke:#5DADE2,color:#333
+    style BP fill:#7FB3D0,stroke:#5DADE2,color:#333
+    style ConfigClass fill:#7FB3D0,stroke:#5DADE2,color:#333

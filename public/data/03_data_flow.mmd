@@ -1,80 +1,96 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#AED6F1',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
 flowchart LR
-    %% Flask Data Flow - Auto-generated from architecture analysis %%
-    %% 16 nodes, 8 subgraphs, error branch, U-shape layout %%
-
     subgraph Input["Input / 入力"]
-        Client["[User] Client<br/>Browser"]
+        Client["[User] Client<br/>Browser / HTTP Client<br/>ブラウザ/HTTPクライアント"]
+        CLIInput["[CLI] Terminal<br/>flask run / flask shell<br/>コマンドライン"]
     end
 
-    subgraph Entry["Entry / エントリポイント"]
-        WSGICall["[Entry] WSGI Call<br/>Flask.__call__()"]
-        Middleware["[Hook] Middleware<br/>WSGIミドルウェア"]
+    subgraph Entry["Entry Point / エントリーポイント"]
+        WSGICall["[Entry] Flask.__call__<br/>WSGI Application<br/>WSGIアプリケーション"]
+        CLIEntry["[Entry] FlaskGroup<br/>Click Command<br/>Clickコマンド"]
     end
 
-    subgraph Context["Context / コンテキスト"]
-        PushCtx["[Ctx] AppContext Push<br/>ctx stack"]
-        BindReq["[Hook] Bind Request<br/>LocalProxy"]
+    subgraph ContextSetup["Context Setup / コンテキスト設定"]
+        PushCtx["[Ctx] push AppContext<br/>Create Context<br/>コンテキスト作成"]
+        BindReq["[Ctx] Bind Request<br/>LocalProxy Setup<br/>LocalProxy設定"]
+    end
+
+    subgraph Middleware["Middleware / ミドルウェア"]
+        BeforeReq["[Hook] before_request<br/>Pre-processing Hooks<br/>前処理フック"]
+        URLMatch["[Router] url_map.match<br/>URL Rule Resolution<br/>URLルール解決"]
     end
 
     subgraph Processing["Processing / 処理"]
-        BeforeReq["[Hook] before_request<br/>前処理フック"]
-        URLMatch["[Router] URL Router<br/>url_map.match()"]
-    end
-
-    subgraph View["View / ビュー"]
-        ViewFunc["[View] View Function<br/>ビジネスロジック"]
-        Template["[View] Template<br/>Jinja2 Render"]
-    end
-
-    subgraph Error["Error / エラー"]
-        ErrorHandler["[Error] Error Handler<br/>例外ハンドラ"]
+        ViewFunc["[View] View Function<br/>User-defined Handler<br/>ユーザー定義ハンドラ"]
+        ErrorHandler["[Error] handle_exception<br/>Error Processing<br/>エラー処理"]
     end
 
     subgraph Response["Response / レスポンス"]
-        MakeRes["[Resp] Response Build<br/>Response構築"]
-        AfterReq["[Hook] after_request<br/>後処理フック"]
-    end
-
-    subgraph Cleanup["Cleanup / クリーンアップ"]
-        SessionSave["[Session] Session Save<br/>Cookie保存"]
-        Teardown["[Cleanup] teardown<br/>リソース解放"]
-        PopCtx["[Ctx] Context Pop<br/>ctx解放"]
+        MakeRes["[Resp] make_response<br/>Build Response Object<br/>レスポンスオブジェクト構築"]
+        AfterReq["[Hook] after_request<br/>Post-processing Hooks<br/>後処理フック"]
+        SessionSave["[Session] save_session<br/>Persist Session Data<br/>セッションデータ永続化"]
     end
 
     subgraph Output["Output / 出力"]
-        HTTPResp["[Output] HTTP Response<br/>200 OK"]
+        HTTPResp["[Output] HTTP Response<br/>Status + Headers + Body<br/>ステータス+ヘッダー+ボディ"]
+        CLIOutput["[Output] CLI Result<br/>Console Output<br/>コンソール出力"]
     end
 
-    Client -->|HTTP Request| WSGICall
-    WSGICall -->|WSGI Environ| Middleware
-    Middleware -->|Request Init| PushCtx
-    PushCtx -->|Context Push| BindReq
-    BindReq -->|Hook Chain| BeforeReq
-    BeforeReq -->|Route Dispatch| URLMatch
-    URLMatch -->|Matched Route| ViewFunc
-    ViewFunc -->|Render Context| Template
-    ViewFunc -->|Exception| ErrorHandler
-    Template -->|HTML| MakeRes
-    ErrorHandler -->|Error Response| MakeRes
-    MakeRes -->|Response Obj| AfterReq
-    AfterReq -->|Session Data| SessionSave
-    SessionSave -->|Cleanup Signal| Teardown
-    Teardown -->|Context Release| PopCtx
-    PopCtx -->|HTTP Response| HTTPResp
+    subgraph Cleanup["Cleanup / クリーンアップ"]
+        TdownReq["[Cleanup] teardown_request<br/>Request Cleanup<br/>リクエストクリーンアップ"]
+        PopCtx["[Cleanup] pop AppContext<br/>Context Teardown<br/>コンテキスト破棄"]
+    end
 
-    style Client fill:#6C9BD2,stroke:#4A4D60
-    style WSGICall fill:#7BC67E,stroke:#4A4D60
-    style Middleware fill:#7BC67E,stroke:#4A4D60
-    style PushCtx fill:#7BC7C4,stroke:#4A4D60
-    style BindReq fill:#7BC7C4,stroke:#4A4D60
-    style BeforeReq fill:#D4A76A,stroke:#4A4D60
-    style URLMatch fill:#D4A76A,stroke:#4A4D60
-    style ViewFunc fill:#C77DBA,stroke:#4A4D60
-    style Template fill:#C77DBA,stroke:#4A4D60
-    style ErrorHandler fill:#D4826A,stroke:#4A4D60
-    style MakeRes fill:#8BD49E,stroke:#4A4D60
-    style AfterReq fill:#8BD49E,stroke:#4A4D60
-    style SessionSave fill:#8BD49E,stroke:#4A4D60
-    style Teardown fill:#9AABB8,stroke:#4A4D60
-    style PopCtx fill:#9AABB8,stroke:#4A4D60
-    style HTTPResp fill:#6C9BD2,stroke:#4A4D60
+    %% HTTP Request Flow
+    Client --> WSGICall
+    WSGICall --> PushCtx
+    PushCtx --> BindReq
+    BindReq --> BeforeReq
+    BeforeReq --> URLMatch
+    URLMatch --> ViewFunc
+    ViewFunc --> MakeRes
+    ViewFunc -->|error| ErrorHandler
+    ErrorHandler --> MakeRes
+    MakeRes --> AfterReq
+    AfterReq --> SessionSave
+    SessionSave --> TdownReq
+    TdownReq --> PopCtx
+    PopCtx --> HTTPResp
+
+    %% CLI Flow
+    CLIInput --> CLIEntry
+    CLIEntry --> PushCtx
+    CLIEntry --> CLIOutput
+
+    %% Styles
+    style Input fill:#5D6D7E,stroke:#4A4D60,color:#fff
+    style Entry fill:#F5B7B1,stroke:#D98880,color:#333
+    style ContextSetup fill:#A3E4D7,stroke:#48C9B0,color:#333
+    style Middleware fill:#FAD7A0,stroke:#C68A00,color:#333
+    style Processing fill:#F9E79F,stroke:#D4AC00,color:#333
+    style Response fill:#A9DFBF,stroke:#52BE80,color:#333
+    style Output fill:#AED6F1,stroke:#5DADE2,color:#333
+    style Cleanup fill:#D5DBDB,stroke:#85929E,color:#333
+
+    style Client fill:#5D6D7E,stroke:#4A4D60,color:#fff
+    style CLIInput fill:#5D6D7E,stroke:#4A4D60,color:#fff
+    style WSGICall fill:#F5B7B1,stroke:#D98880,color:#333
+    style CLIEntry fill:#F5B7B1,stroke:#D98880,color:#333
+    style PushCtx fill:#A3E4D7,stroke:#48C9B0,color:#333
+    style BindReq fill:#A3E4D7,stroke:#48C9B0,color:#333
+    style BeforeReq fill:#FAD7A0,stroke:#C68A00,color:#333
+    style URLMatch fill:#FAD7A0,stroke:#C68A00,color:#333
+    style ViewFunc fill:#F9E79F,stroke:#D4AC00,color:#333
+    style ErrorHandler fill:#F9E79F,stroke:#D4AC00,color:#333
+    style MakeRes fill:#A9DFBF,stroke:#52BE80,color:#333
+    style AfterReq fill:#A9DFBF,stroke:#52BE80,color:#333
+    style SessionSave fill:#A9DFBF,stroke:#52BE80,color:#333
+    style HTTPResp fill:#AED6F1,stroke:#5DADE2,color:#333
+    style CLIOutput fill:#AED6F1,stroke:#5DADE2,color:#333
+    style TdownReq fill:#D5DBDB,stroke:#85929E,color:#333
+    style PopCtx fill:#D5DBDB,stroke:#85929E,color:#333
