@@ -85,6 +85,14 @@ export interface VisualizationSubgraph {
   id: string;
   title: string;
   order?: number;
+  clusterBounds?: ClusterBounds;
+}
+
+export interface ClusterBounds {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
 }
 
 export interface ViewConfig {
@@ -96,4 +104,5 @@ export interface ViewConfig {
   subgraphs: Map<string, VisualizationSubgraph>;
   nodeSubgraphs: Map<string, string>;
   rawMmdText?: string;
+  clusterBounds?: Map<string, ClusterBounds>;
 }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { VisualizationSubgraph } from '@/types/visualization';
+import type { ClusterBounds, VisualizationSubgraph } from '@/types/visualization';
 
 const FLOOR_COLOR = 0xf0f4f8;
 const FLOOR_OPACITY = 0.3;
@@ -63,6 +63,7 @@ export class SubgraphRenderer {
     subgraphs: Map<string, VisualizationSubgraph> | undefined,
     nodeSubgraphs: Map<string, string>,
     resourceMeshes: Map<string, THREE.Group>,
+    clusterBounds?: Map<string, ClusterBounds>,
   ): void {
     this.clear();
 
@@ -82,18 +83,32 @@ export class SubgraphRenderer {
       const members = membersBySg.get(sg.id);
       if (!members || members.length === 0) continue;
 
-      let minX = Infinity;
-      let maxX = -Infinity;
-      let minZ = Infinity;
-      let maxZ = -Infinity;
-      for (const nodeId of members) {
-        const mesh = resourceMeshes.get(nodeId);
-        if (!mesh) continue;
-        const p = mesh.position;
-        minX = Math.min(minX, p.x);
-        maxX = Math.max(maxX, p.x);
-        minZ = Math.min(minZ, p.z);
-        maxZ = Math.max(maxZ, p.z);
+      let minX: number;
+      let maxX: number;
+      let minZ: number;
+      let maxZ: number;
+
+      // Use SVG-derived cluster bounds if available, otherwise compute from node positions
+      const svgBounds = clusterBounds?.get(sg.id);
+      if (svgBounds) {
+        minX = svgBounds.minX;
+        maxX = svgBounds.maxX;
+        minZ = svgBounds.minZ;
+        maxZ = svgBounds.maxZ;
+      } else {
+        minX = Infinity;
+        maxX = -Infinity;
+        minZ = Infinity;
+        maxZ = -Infinity;
+        for (const nodeId of members) {
+          const mesh = resourceMeshes.get(nodeId);
+          if (!mesh) continue;
+          const p = mesh.position;
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+          minZ = Math.min(minZ, p.z);
+          maxZ = Math.max(maxZ, p.z);
+        }
       }
 
       const width = maxX - minX + PADDING * 2;

@@ -20,7 +20,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['three', 'dagre'],
+    include: ['three', 'dagre', 'mermaid'],
   },
   build: {
     rollupOptions: {
@@ -37,6 +37,9 @@ export default defineConfig({
           }
           if (id.includes('node_modules/lucide-react')) {
             return 'ui-vendor';
+          }
+          if (id.includes('node_modules/mermaid')) {
+            return 'mermaid-vendor';
           }
         },
       },

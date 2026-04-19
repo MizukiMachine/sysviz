@@ -111,7 +111,7 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
       }
 
       if (view.subgraphs.size > 0) {
-        sg.render(view.subgraphs, view.nodeSubgraphs, renderer.resourceMeshes);
+        sg.render(view.subgraphs, view.nodeSubgraphs, renderer.resourceMeshes, view.clusterBounds);
       }
 
       if (view.camera) {
