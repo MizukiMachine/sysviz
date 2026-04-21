@@ -43,8 +43,9 @@ export function useVisualizationController({
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-    const config = getActiveConfig(loadSettings());
-    if (!config) return data;
+    const settings = loadSettings();
+    const config = getActiveConfig(settings);
+    if (!config || !settings.captionEnrichment) return data;
 
     setIsEnriching(true);
     try {

@@ -834,6 +834,39 @@ export class MermaidParser {
 
     if (!isFinite(rawMinX)) return clusterBounds;
 
+    // Build cluster rect extents in flow direction for accurate gap detection
+    const clusterFlowExtents = new Map<string, { minX: number; maxX: number }>();
+    for (const [originalId, svgElId] of idMap.entries()) {
+      const clusterPos = svgPositions.clusterPositions.get(svgElId);
+      if (!clusterPos) continue;
+      const { x: cX } = this._svgPointToFlowPosition(clusterPos, direction);
+      const halfW = (direction === 'LR' || direction === 'RL' ? clusterPos.width : clusterPos.height) / 2;
+      clusterFlowExtents.set(originalId, { minX: cX - halfW, maxX: cX + halfW });
+    }
+
+    // Add extra spacing between different subgraph groups in the flow direction
+    // to prevent subgraph areas from overlapping.
+    const groupShifts = this._separateSubgraphGroups(rawPositions, nodeSubgraphs, clusterFlowExtents);
+
+    // Recompute bounds after separation, including cluster rect extents
+    rawMinX = Infinity;
+    rawMaxX = -Infinity;
+    rawMinZ = Infinity;
+    rawMaxZ = -Infinity;
+    for (const raw of rawPositions.values()) {
+      rawMinX = Math.min(rawMinX, raw.x);
+      rawMaxX = Math.max(rawMaxX, raw.x);
+      rawMinZ = Math.min(rawMinZ, raw.z);
+      rawMaxZ = Math.max(rawMaxZ, raw.z);
+    }
+    // Also include shifted cluster extents for accurate total bounds
+    for (const [originalId, extent] of clusterFlowExtents.entries()) {
+      const s = groupShifts.get(originalId) ?? 0;
+      rawMinX = Math.min(rawMinX, extent.minX + s);
+      rawMaxX = Math.max(rawMaxX, extent.maxX + s);
+    }
+    if (!isFinite(rawMinX)) return clusterBounds;
+
     // Non-uniform scaling: flow direction fits TARGET_MAX_EXTENT, cross direction
     // gets a minimum extent to prevent excessive compression of narrow layouts.
     const TARGET_MAX_EXTENT = 50;
@@ -870,9 +903,13 @@ export class MermaidParser {
       const clusterPos = svgPositions.clusterPositions.get(svgElId);
       if (!clusterPos) continue;
 
-      const { x: cCX, z: cCZ } = this._svgPointToFlowPosition(clusterPos, direction);
+      let { x: cCX, z: cCZ } = this._svgPointToFlowPosition(clusterPos, direction);
       const halfW = (direction === 'LR' || direction === 'RL' ? clusterPos.width : clusterPos.height) / 2;
       const halfH = (direction === 'LR' || direction === 'RL' ? clusterPos.height : clusterPos.width) / 2;
+
+      // Apply the same inter-group shift that was applied to nodes
+      const sgShift = groupShifts.get(originalId) ?? 0;
+      cCX += sgShift;
 
       let minX = (cCX - halfW - rawCX) * flowScale;
       let maxX = (cCX + halfW - rawCX) * flowScale;
@@ -894,6 +931,78 @@ export class MermaidParser {
     }
 
     return clusterBounds;
+  }
+
+  /**
+   * Add extra spacing between different subgraph groups in the flow direction.
+   * Uses cluster rect extents (not just node positions) to accurately detect
+   * overlapping or tightly-packed subgraph areas and insert gaps.
+   */
+  private _separateSubgraphGroups(
+    rawPositions: Map<string, FlowPosition>,
+    nodeSubgraphs: Map<string, string>,
+    clusterFlowExtents: Map<string, { minX: number; maxX: number }>,
+  ): Map<string, number> {
+    interface GroupRange { id: string; minX: number; maxX: number; nodeIds: string[] }
+    const groups: GroupRange[] = [];
+    const ungrouped: GroupRange = { id: '__ungrouped__', minX: Infinity, maxX: -Infinity, nodeIds: [] };
+
+    for (const [nodeId, raw] of rawPositions.entries()) {
+      const sgId = nodeSubgraphs.get(nodeId);
+      if (sgId) {
+        let group = groups.find((g) => g.id === sgId);
+        if (!group) {
+          group = { id: sgId, minX: Infinity, maxX: -Infinity, nodeIds: [] };
+          groups.push(group);
+        }
+        group.minX = Math.min(group.minX, raw.x);
+        group.maxX = Math.max(group.maxX, raw.x);
+        group.nodeIds.push(nodeId);
+      } else {
+        ungrouped.minX = Math.min(ungrouped.minX, raw.x);
+        ungrouped.maxX = Math.max(ungrouped.maxX, raw.x);
+        ungrouped.nodeIds.push(nodeId);
+      }
+    }
+
+    // Expand group ranges to include cluster rect extents where available
+    for (const g of groups) {
+      const extent = clusterFlowExtents.get(g.id);
+      if (extent) {
+        g.minX = Math.min(g.minX, extent.minX);
+        g.maxX = Math.max(g.maxX, extent.maxX);
+      }
+    }
+
+    if (ungrouped.nodeIds.length > 0) groups.push(ungrouped);
+    groups.sort((a, b) => a.minX - b.minX);
+    if (groups.length < 2) return new Map();
+
+    // Compute minimum gap: 40% of average subgroup width
+    let totalWidth = 0;
+    for (const g of groups) totalWidth += g.maxX - g.minX;
+    const minGap = Math.max((totalWidth / groups.length) * 0.4, 30);
+
+    // Track per-group shift and apply
+    const shifts = new Map<string, number>();
+    let shift = 0;
+    shifts.set(groups[0].id, 0);
+    for (let i = 1; i < groups.length; i++) {
+      const gap = groups[i].minX - groups[i - 1].maxX;
+      if (gap < minGap) shift += (minGap - gap);
+      shifts.set(groups[i].id, shift);
+    }
+
+    for (const g of groups) {
+      const s = shifts.get(g.id)!;
+      if (s === 0) continue;
+      for (const nodeId of g.nodeIds) {
+        const pos = rawPositions.get(nodeId);
+        if (pos) pos.x += s;
+      }
+    }
+
+    return shifts;
   }
 
   private _svgPointToFlowPosition(svgPos: SvgNodePosition, direction: MermaidDirection): FlowPosition {

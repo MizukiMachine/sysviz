@@ -4,6 +4,7 @@ export type LLMProvider = 'gemini' | 'glm';
 
 export interface LLMSettings {
   provider: LLMProvider;
+  captionEnrichment: boolean;
   gemini: { apiKey: string; model: string };
   glm: { apiKey: string; model: string };
 }
@@ -15,6 +16,7 @@ export const PROVIDER_BASE_URLS: Record<LLMProvider, string> = {
 
 export const DEFAULT_SETTINGS: LLMSettings = {
   provider: 'gemini',
+  captionEnrichment: true,
   gemini: { apiKey: '', model: 'gemini-2.0-flash' },
   glm: { apiKey: '', model: 'glm-5.1' },
 };
@@ -35,6 +37,7 @@ export const loadSettings = (): LLMSettings => {
 
     return {
       provider,
+      captionEnrichment: parsed.captionEnrichment ?? DEFAULT_SETTINGS.captionEnrichment,
       gemini: { ...DEFAULT_SETTINGS.gemini, ...(parsed.gemini || {}) },
       glm: { ...DEFAULT_SETTINGS.glm, ...(parsed.glm || {}) },
     };
