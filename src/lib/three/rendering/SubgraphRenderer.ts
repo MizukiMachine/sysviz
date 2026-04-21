@@ -5,7 +5,7 @@ const FLOOR_COLOR = 0xf0f4f8;
 const FLOOR_OPACITY = 0.3;
 const BORDER_COLOR = 0x94a3b8;
 const BORDER_OPACITY = 0.5;
-const PADDING = 2.0;
+const PADDING = 0.8;
 
 interface SubgraphEntry {
   group: THREE.Group;
