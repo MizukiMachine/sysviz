@@ -767,15 +767,17 @@ export class MermaidParser {
     if (!Number.isFinite(rawMinX)) return clusterBounds;
 
     // Non-uniform scaling: flow direction fits TARGET_MAX_EXTENT, cross direction
-    // is constrained to a max aspect ratio relative to flowScale to prevent
-    // excessive vertical spacing in LR flowcharts.
+    // uses its own target so it isn't crushed when the flow direction has a
+    // much larger SVG extent (e.g. TB charts with many subgraph rows).
     const TARGET_MAX_EXTENT = 50;
+    const CROSS_TARGET_MAX_EXTENT = 35;
     const MAX_ASPECT_RATIO = 6.0;
     const rawExtentX = rawMaxX - rawMinX;
     const rawExtentZ = rawMaxZ - rawMinZ;
     const flowScale = Math.min(0.8, TARGET_MAX_EXTENT / Math.max(rawExtentX, 1));
+    const crossScaleRaw = CROSS_TARGET_MAX_EXTENT / Math.max(rawExtentZ, 1);
     const minCrossScale = flowScale / MAX_ASPECT_RATIO;
-    const crossScale = Math.max(minCrossScale, Math.min(0.8, flowScale));
+    const crossScale = Math.max(minCrossScale, Math.min(0.8, crossScaleRaw));
 
     const rawCX = (rawMinX + rawMaxX) / 2;
     const rawCZ = (rawMinZ + rawMaxZ) / 2;
