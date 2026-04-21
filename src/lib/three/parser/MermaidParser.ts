@@ -770,7 +770,7 @@ export class MermaidParser {
     // uses its own target so it isn't crushed when the flow direction has a
     // much larger SVG extent (e.g. TB charts with many subgraph rows).
     const TARGET_MAX_EXTENT = 50;
-    const CROSS_TARGET_MAX_EXTENT = 35;
+    const CROSS_TARGET_MAX_EXTENT = 12;
     const MAX_ASPECT_RATIO = 6.0;
     const rawExtentX = rawMaxX - rawMinX;
     const rawExtentZ = rawMaxZ - rawMinZ;
