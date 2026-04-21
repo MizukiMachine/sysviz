@@ -442,7 +442,8 @@ export class ClusterRenderer {
     const userData = group.userData as ResourceUserData;
     userData.resourceId = resource.id;
     userData.resourceType = typeof resource.type === 'string' ? resource.type : undefined;
-    group.position.set(resource.x || 0, resource.y || 0, resource.z || 0);
+    const halfHeight = (group.userData as ResourceUserData & { halfHeight?: number }).halfHeight ?? 0.65;
+    group.position.set(resource.x || 0, (resource.y || 0) + halfHeight, resource.z || 0);
 
     group.traverse((child) => {
       const object = child as ResourceObject3D;

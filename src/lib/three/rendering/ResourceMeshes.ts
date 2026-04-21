@@ -29,6 +29,7 @@ interface MeshUserData {
   baseY?: number;
   animate?: (time: number, delta?: number) => void;
   isScaled?: boolean;
+  halfHeight?: number;
 }
 
 type ResourceGroup = THREE.Group;
@@ -269,11 +270,21 @@ const CREATORS: Record<string, ResourceCreator> = {
   torus: createTorusResource,
 };
 
+const HALF_HEIGHTS: Record<string, number> = {
+  default: 0.65,
+  sphere: 1.0,
+  cylinder: 0.7,
+  diamond: 1.0,
+  torus: 1.0,
+};
+
 export class ResourceMeshFactory {
   create(resource: VisualizationNode): ResourceGroup {
     const shape = resource.shape || 'default';
     const creator = CREATORS[shape] || CREATORS.default;
-    return creator(resource);
+    const group = creator(resource);
+    (group.userData as MeshUserData).halfHeight = HALF_HEIGHTS[shape] || HALF_HEIGHTS.default;
+    return group;
   }
 
   updateStatus(group: ResourceGroup, status: VisualizationResourceStatus): void {
