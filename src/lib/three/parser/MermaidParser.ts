@@ -73,6 +73,9 @@ const SVG_TRANSLATE_RE = new RegExp(
   'i',
 );
 
+const CLUSTER_NODE_MARGIN_X = 1.5; // Half of RoundedBoxGeometry width 2.8, plus a small buffer.
+const CLUSTER_NODE_MARGIN_Z = 0.7; // Half of RoundedBoxGeometry depth (approx).
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -149,18 +152,8 @@ interface SvgNodePosition {
   y: number;
 }
 
-interface SvgClusterPosition {
-  /** Center x in SVG coordinates. */
-  x: number;
-  /** Center y in SVG coordinates. */
-  y: number;
-  width: number;
-  height: number;
-}
-
 interface SvgLayoutPositions {
   nodePositions: Map<string, SvgNodePosition>;
-  clusterPositions: Map<string, SvgClusterPosition>;
 }
 
 interface FlowPosition {
@@ -589,7 +582,7 @@ export class MermaidParser {
   // =========================================================================
 
   /**
-   * Render mermaid diagram to SVG and extract node/cluster positions.
+   * Render mermaid diagram to SVG and extract node positions.
    * Throws if Mermaid cannot render or the SVG does not contain usable node
    * positions. The caller applies a deterministic non-dagre fallback.
    */
@@ -693,73 +686,18 @@ export class MermaidParser {
   }
 
   /**
-   * Parse node and cluster positions from SVG elements.
-   * Nodes usually use transform="translate(x, y)". Clusters may use either a
-   * translated group or absolute rect x/y coordinates depending on Mermaid's
-   * renderer version.
+   * Parse node positions from SVG elements.
+   * Mermaid nodes usually use transform="translate(x, y)".
    */
   private _parseSvgPositions(svgDoc: Document): SvgLayoutPositions {
     const nodePositions = new Map<string, SvgNodePosition>();
-    const clusterPositions = new Map<string, SvgClusterPosition>();
-
     const allGroups = svgDoc.querySelectorAll<SVGGElement>('g[id]');
 
     for (const g of allGroups) {
-      const svgElId = g.getAttribute('id');
-      if (!svgElId) continue;
       const classList = g.getAttribute('class') || '';
-
-      const isCluster = classList.includes('cluster');
-
-      if (isCluster) {
-        const groupTranslate = this._parseTranslate(g.getAttribute('transform'));
-        let x = groupTranslate?.x ?? 0;
-        let y = groupTranslate?.y ?? 0;
-        let width: number | null = null;
-        let height: number | null = null;
-        const rect = g.querySelector('rect');
-        if (rect) {
-          const rectX = this._parseSvgNumber(rect.getAttribute('x'));
-          const rectY = this._parseSvgNumber(rect.getAttribute('y'));
-          width = this._parseSvgNumber(rect.getAttribute('width'));
-          height = this._parseSvgNumber(rect.getAttribute('height'));
-
-          if (width !== null && height !== null) {
-            x += (rectX ?? 0) + width / 2;
-            y += (rectY ?? 0) + height / 2;
-          }
-        }
-
-        // If no rect dimensions are available, approximate from child node centers.
-        if (width === null || height === null) {
-          const childNodes = g.querySelectorAll('.node');
-          if (childNodes.length > 0) {
-            let minX = Infinity;
-            let maxX = -Infinity;
-            let minY = Infinity;
-            let maxY = -Infinity;
-            for (const cn of childNodes) {
-              const childTranslate = this._parseTranslate(cn.getAttribute('transform'));
-              if (childTranslate) {
-                minX = Math.min(minX, childTranslate.x);
-                maxX = Math.max(maxX, childTranslate.x);
-                minY = Math.min(minY, childTranslate.y);
-                maxY = Math.max(maxY, childTranslate.y);
-              }
-            }
-            if (isFinite(minX)) {
-              width = maxX - minX;
-              height = maxY - minY;
-              x = (minX + maxX) / 2;
-              y = (minY + maxY) / 2;
-            }
-          }
-        }
-
-        if (width !== null && height !== null && width > 0 && height > 0) {
-          clusterPositions.set(svgElId, { x, y, width, height });
-        }
-      } else if (classList.includes('node') || classList.includes('default')) {
+      if (classList.includes('node') || classList.includes('default')) {
+        const svgElId = g.getAttribute('id');
+        if (!svgElId) continue;
         const translate = this._parseTranslate(g.getAttribute('transform'));
         if (translate) {
           nodePositions.set(svgElId, translate);
@@ -767,7 +705,7 @@ export class MermaidParser {
       }
     }
 
-    return { nodePositions, clusterPositions };
+    return { nodePositions };
   }
 
   private _parseTranslate(transform: string | null): SvgNodePosition | null {
@@ -780,16 +718,10 @@ export class MermaidParser {
     return { x, y };
   }
 
-  private _parseSvgNumber(value: string | null): number | null {
-    if (!value) return null;
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
   /**
    * Map SVG coordinates to 3D world coordinates using non-uniform scaling.
-   * Returns cluster bounds derived from SVG cluster rects with the same scaling,
-   * so the 3D subgraph areas match the 2D mermaid diagram proportions.
+   * Scaling runs before 3D subgraph gap insertion, and cluster bounds are then
+   * derived from the adjusted node positions.
    */
   private _mapSvgTo3D(
     nodes: MermaidNode[],
@@ -832,17 +764,7 @@ export class MermaidParser {
       }
     }
 
-    if (!isFinite(rawMinX)) return clusterBounds;
-
-    // Build cluster rect extents in flow direction for accurate gap detection
-    const clusterFlowExtents = new Map<string, { minX: number; maxX: number }>();
-    for (const [originalId, svgElId] of idMap.entries()) {
-      const clusterPos = svgPositions.clusterPositions.get(svgElId);
-      if (!clusterPos) continue;
-      const { x: cX } = this._svgPointToFlowPosition(clusterPos, direction);
-      const halfW = (direction === 'LR' || direction === 'RL' ? clusterPos.width : clusterPos.height) / 2;
-      clusterFlowExtents.set(originalId, { minX: cX - halfW, maxX: cX + halfW });
-    }
+    if (!Number.isFinite(rawMinX)) return clusterBounds;
 
     // Non-uniform scaling: flow direction fits TARGET_MAX_EXTENT, cross direction
     // is constrained to a max aspect ratio relative to flowScale to prevent
@@ -871,104 +793,7 @@ export class MermaidParser {
     // (after scaling) to prevent subgraph floor planes from overlapping.
     this._separateSubgraphGroups3D(nodes, nodeSubgraphs);
 
-    // Compute cluster bounds from already-scaled node positions with a
-    // fixed margin matching the RoundedBoxGeometry dimensions.
-    const clusterToNodes = new Map<string, MermaidNode[]>();
-    for (const node of nodes) {
-      const sgId = nodeSubgraphs.get(node.id);
-      if (sgId) {
-        if (!clusterToNodes.has(sgId)) clusterToNodes.set(sgId, []);
-        clusterToNodes.get(sgId)!.push(node);
-      }
-    }
-
-    const NODE_MARGIN_X = 1.5;  // half of RoundedBoxGeometry width 2.8
-    const NODE_MARGIN_Z = 0.7;  // half of RoundedBoxGeometry depth (approx)
-
-    for (const [clusterId, members] of clusterToNodes.entries()) {
-      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-      for (const member of members) {
-        minX = Math.min(minX, member.x - NODE_MARGIN_X);
-        maxX = Math.max(maxX, member.x + NODE_MARGIN_X);
-        minZ = Math.min(minZ, member.z - NODE_MARGIN_Z);
-        maxZ = Math.max(maxZ, member.z + NODE_MARGIN_Z);
-      }
-      if (isFinite(minX)) clusterBounds.set(clusterId, { minX, maxX, minZ, maxZ });
-    }
-
-    return clusterBounds;
-  }
-
-  /**
-   * Add extra spacing between different subgraph groups in the flow direction.
-   * Uses cluster rect extents (not just node positions) to accurately detect
-   * overlapping or tightly-packed subgraph areas and insert gaps.
-   */
-  private _separateSubgraphGroups(
-    rawPositions: Map<string, FlowPosition>,
-    nodeSubgraphs: Map<string, string>,
-    clusterFlowExtents: Map<string, { minX: number; maxX: number }>,
-  ): Map<string, number> {
-    interface GroupRange { id: string; minX: number; maxX: number; nodeIds: string[] }
-    const groups: GroupRange[] = [];
-    const ungrouped: GroupRange = { id: '__ungrouped__', minX: Infinity, maxX: -Infinity, nodeIds: [] };
-
-    for (const [nodeId, raw] of rawPositions.entries()) {
-      const sgId = nodeSubgraphs.get(nodeId);
-      if (sgId) {
-        let group = groups.find((g) => g.id === sgId);
-        if (!group) {
-          group = { id: sgId, minX: Infinity, maxX: -Infinity, nodeIds: [] };
-          groups.push(group);
-        }
-        group.minX = Math.min(group.minX, raw.x);
-        group.maxX = Math.max(group.maxX, raw.x);
-        group.nodeIds.push(nodeId);
-      } else {
-        ungrouped.minX = Math.min(ungrouped.minX, raw.x);
-        ungrouped.maxX = Math.max(ungrouped.maxX, raw.x);
-        ungrouped.nodeIds.push(nodeId);
-      }
-    }
-
-    // Expand group ranges to include cluster rect extents where available
-    for (const g of groups) {
-      const extent = clusterFlowExtents.get(g.id);
-      if (extent) {
-        g.minX = Math.min(g.minX, extent.minX);
-        g.maxX = Math.max(g.maxX, extent.maxX);
-      }
-    }
-
-    if (ungrouped.nodeIds.length > 0) groups.push(ungrouped);
-    groups.sort((a, b) => a.minX - b.minX);
-    if (groups.length < 2) return new Map();
-
-    // Compute minimum gap: 40% of average subgroup width
-    let totalWidth = 0;
-    for (const g of groups) totalWidth += g.maxX - g.minX;
-    const minGap = Math.max((totalWidth / groups.length) * 0.4, 30);
-
-    // Track per-group shift and apply
-    const shifts = new Map<string, number>();
-    let shift = 0;
-    shifts.set(groups[0].id, 0);
-    for (let i = 1; i < groups.length; i++) {
-      const gap = groups[i].minX - groups[i - 1].maxX;
-      if (gap < minGap) shift += (minGap - gap);
-      shifts.set(groups[i].id, shift);
-    }
-
-    for (const g of groups) {
-      const s = shifts.get(g.id)!;
-      if (s === 0) continue;
-      for (const nodeId of g.nodeIds) {
-        const pos = rawPositions.get(nodeId);
-        if (pos) pos.x += s;
-      }
-    }
-
-    return shifts;
+    return this._computeClusterBoundsFromNodes(nodes, nodeSubgraphs);
   }
 
   /**
@@ -981,17 +806,18 @@ export class MermaidParser {
     nodeSubgraphs: Map<string, string>,
   ): void {
     interface GroupRange { id: string; minX: number; maxX: number; nodeIndices: number[] }
-    const groups: GroupRange[] = [];
+    const grouped = new Map<string, GroupRange>();
     const ungrouped: GroupRange = { id: '__ungrouped__', minX: Infinity, maxX: -Infinity, nodeIndices: [] };
 
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
+      if (!Number.isFinite(node.x)) continue;
       const sgId = nodeSubgraphs.get(node.id);
       if (sgId) {
-        let group = groups.find((g) => g.id === sgId);
+        let group = grouped.get(sgId);
         if (!group) {
           group = { id: sgId, minX: Infinity, maxX: -Infinity, nodeIndices: [] };
-          groups.push(group);
+          grouped.set(sgId, group);
         }
         group.minX = Math.min(group.minX, node.x);
         group.maxX = Math.max(group.maxX, node.x);
@@ -1003,6 +829,7 @@ export class MermaidParser {
       }
     }
 
+    const groups = [...grouped.values()];
     if (ungrouped.nodeIndices.length > 0) groups.push(ungrouped);
     groups.sort((a, b) => a.minX - b.minX);
     if (groups.length < 2) return;
@@ -1057,12 +884,13 @@ export class MermaidParser {
     for (const [clusterId, members] of membersByCluster) {
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
       for (const node of members) {
-        minX = Math.min(minX, node.x);
-        maxX = Math.max(maxX, node.x);
-        minZ = Math.min(minZ, node.z);
-        maxZ = Math.max(maxZ, node.z);
+        if (!Number.isFinite(node.x) || !Number.isFinite(node.z)) continue;
+        minX = Math.min(minX, node.x - CLUSTER_NODE_MARGIN_X);
+        maxX = Math.max(maxX, node.x + CLUSTER_NODE_MARGIN_X);
+        minZ = Math.min(minZ, node.z - CLUSTER_NODE_MARGIN_Z);
+        maxZ = Math.max(maxZ, node.z + CLUSTER_NODE_MARGIN_Z);
       }
-      if (isFinite(minX)) {
+      if (Number.isFinite(minX)) {
         bounds.set(clusterId, { minX, maxX, minZ, maxZ });
       }
     }
@@ -1163,7 +991,7 @@ export class MermaidParser {
       const gap = Math.abs(flowPositions[i] - flowPositions[i - 1]);
       if (gap > 0 && gap < minGap) minGap = gap;
     }
-    const TOLERANCE = isFinite(minGap) ? minGap * 0.4 : 1.8;
+    const TOLERANCE = Number.isFinite(minGap) ? minGap * 0.4 : 1.8;
 
     const layers: string[][] = [];
     let currentLayer: string[] = [];
