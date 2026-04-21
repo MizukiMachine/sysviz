@@ -73,8 +73,8 @@ const SVG_TRANSLATE_RE = new RegExp(
   'i',
 );
 
-const CLUSTER_NODE_MARGIN_X = 1.5; // Half of RoundedBoxGeometry width 2.8, plus a small buffer.
-const CLUSTER_NODE_MARGIN_Z = 0.7; // Half of RoundedBoxGeometry depth (approx).
+const CLUSTER_NODE_MARGIN_X = 2.0;
+const CLUSTER_NODE_MARGIN_Z = 1.2;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -770,7 +770,7 @@ export class MermaidParser {
     // is constrained to a max aspect ratio relative to flowScale to prevent
     // excessive vertical spacing in LR flowcharts.
     const TARGET_MAX_EXTENT = 50;
-    const MAX_ASPECT_RATIO = 3.0;
+    const MAX_ASPECT_RATIO = 6.0;
     const rawExtentX = rawMaxX - rawMinX;
     const rawExtentZ = rawMaxZ - rawMinZ;
     const flowScale = Math.min(0.8, TARGET_MAX_EXTENT / Math.max(rawExtentX, 1));
@@ -835,10 +835,10 @@ export class MermaidParser {
     if (groups.length < 2) return;
 
     // Compute minimum gap: 40% of average group width, clamped to MIN_3D_GAP
-    const MIN_3D_GAP = 3.0;
+    const MIN_3D_GAP = 6.0;
     let totalWidth = 0;
     for (const g of groups) totalWidth += g.maxX - g.minX;
-    const minGap = Math.max((totalWidth / groups.length) * 0.4, MIN_3D_GAP);
+    const minGap = Math.max((totalWidth / groups.length) * 0.6, MIN_3D_GAP);
 
     // Track cumulative shift per group
     const shifts = new Map<string, number>();
