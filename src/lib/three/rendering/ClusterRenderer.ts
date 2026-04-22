@@ -119,7 +119,7 @@ export class ClusterRenderer {
   _initScene(): void {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(BACKGROUND_COLOR);
-    this.scene.fog = new THREE.FogExp2(0xffffff, 0.012);
+    this.scene.fog = new THREE.FogExp2(0xffffff, 0.005);
   }
 
   _initCamera(): void {

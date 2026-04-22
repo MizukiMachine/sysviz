@@ -2,14 +2,14 @@ import * as THREE from 'three';
 import type { VisualizationConnection } from '@/types/visualization';
 
 const RELATIONSHIP_COLORS = {
-  ownership: 0xc9d1d9,
-  network: 0x93c5fd,
-  storage: 0x8b949e,
-  config: 0xd29922,
-  sync: 0xa5b4fc,
-  async: 0x67e8f9,
-  signal: 0xfcd34d,
-  default: 0xd1d5db,
+  ownership: 0x8b949e,
+  network: 0x3b82f6,
+  storage: 0x6b7280,
+  config: 0xd97706,
+  sync: 0x6366f1,
+  async: 0x06b6d4,
+  signal: 0xeab308,
+  default: 0x64748b,
 } as const;
 
 const DASH_CONFIG = {
@@ -30,8 +30,8 @@ const FLOW_SPEEDS = {
 
 const CURVE_SEGMENTS = 32;
 const BASE_LINE_WIDTH = 1.5;
-const MIN_OPACITY = 0.25;
-const MAX_OPACITY = 0.7;
+const MIN_OPACITY = 0.55;
+const MAX_OPACITY = 1.0;
 
 type LineMaterial = THREE.LineBasicMaterial | THREE.LineDashedMaterial;
 

@@ -1,0 +1,56 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#AED6F1',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E',
+  'actorTextColor': '#333',
+  'signalColor': '#333',
+  'noteBkgColor': '#FAD7A0',
+  'noteBorderColor': '#C68A00'
+}}}%%
+sequenceDiagram
+    autonumber
+    participant Client as [User] Client<br/>クライアント
+    participant WSGI as [I/O] Flask.__call__<br/>WSGIエントリ
+    participant Ctx as [Ctx] AppContext<br/>コンテキスト
+    participant Session as [Session] SessionInterface<br/>セッション
+    participant Before as [Hook] before_request<br/>前処理フック
+    participant Router as [Router] url_map<br/>URLルーター
+    participant View as [View] View Function<br/>ビュー関数
+    participant Error as [Error] handle_exception<br/>エラーハンドラ
+    participant After as [Hook] after_request<br/>後処理フック
+    participant Tdown as [Hook] teardown_request<br/>ティアダウン
+    participant Res as [Output] Response<br/>レスポンス
+
+    Client->>+WSGI: HTTP Request (environ, start_response)
+    WSGI->>+Ctx: push() - Create AppContext
+    Note right of Ctx: current_app, g, request<br/>session が利用可能に
+    Ctx->>+Session: open_session() - Load Cookie
+    Session-->>-Ctx: Session Data
+    Ctx->>+Before: Execute before_request hooks
+    Before-->>-Ctx: Continue / Short-circuit
+
+    alt URL Matched
+        Ctx->>+Router: url_map.match(path, method)
+        Router-->>-Ctx: endpoint, view_args
+        Ctx->>+View: view_function(**view_args)
+    else URL Not Matched
+        Ctx->>+Router: url_map.match() raises
+        Router-->>-Error: 404/405 Exception
+    end
+
+    alt View Returns Successfully
+        View-->>-Ctx: Response / Data
+    else View Raises Exception
+        View-->>+Error: Exception
+        Error-->>-Ctx: Error Response
+    end
+
+    Ctx->>+After: Execute after_request hooks
+    After-->>-Ctx: Modified Response
+    Ctx->>+Session: save_session() - Set Cookie
+    Session-->>-Ctx: Cookie Headers Added
+    Ctx->>+Tdown: Execute teardown_request hooks
+    Tdown-->>-Ctx: Cleanup Done
+    Ctx->>Ctx: pop() - Destroy AppContext
+    WSGI-->>-Client: HTTP Response (status, headers, body)

@@ -144,9 +144,9 @@ function createBodyMaterial(nodeColor: number, statusColor: number): THREE.MeshS
 function createEdgeLines(geometry: THREE.BufferGeometry): THREE.LineSegments {
   const edgeGeometry = new THREE.EdgesGeometry(geometry);
   const edgeMaterial = new THREE.LineBasicMaterial({
-    color: 0xcbd5e1,
+    color: 0x64748b,
     transparent: true,
-    opacity: 0.85,
+    opacity: 1.0,
   });
   return new THREE.LineSegments(edgeGeometry, edgeMaterial);
 }
