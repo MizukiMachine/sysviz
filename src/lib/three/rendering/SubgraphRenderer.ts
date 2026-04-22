@@ -17,7 +17,7 @@ interface DisposableObject3D extends THREE.Object3D {
   material?: THREE.Material | THREE.Material[];
 }
 
-function createFloorLabelTexture(text: string): THREE.CanvasTexture {
+function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   const cW = 1024;
   const cH = 512;
@@ -25,9 +25,11 @@ function createFloorLabelTexture(text: string): THREE.CanvasTexture {
   canvas.height = cH;
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
+  const underlineOffset = Math.round(fontSize * 0.67);
+
   ctx.clearRect(0, 0, cW, cH);
   ctx.fillStyle = 'rgba(51, 65, 85, 0.85)';
-  ctx.font = '700 48px "Inter", sans-serif';
+  ctx.font = `700 ${fontSize}px "Inter", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, cW / 2, cH / 2, cW - 60);
@@ -37,8 +39,8 @@ function createFloorLabelTexture(text: string): THREE.CanvasTexture {
   ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo((cW - lineW) / 2, cH / 2 + 32);
-  ctx.lineTo((cW + lineW) / 2, cH / 2 + 32);
+  ctx.moveTo((cW - lineW) / 2, cH / 2 + underlineOffset);
+  ctx.lineTo((cW + lineW) / 2, cH / 2 + underlineOffset);
   ctx.stroke();
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -145,7 +147,6 @@ export class SubgraphRenderer {
       sgGroup.add(border);
 
       const title = sg.title || sg.id;
-      const floorTex = createFloorLabelTexture(title);
 
       const scaleFactor = members.length === 1 ? 1.8 : 1;
       const texAspect = 2;
@@ -159,18 +160,25 @@ export class SubgraphRenderer {
         planeD = planeW / texAspect;
       }
 
+      // Normalize font size so text appears at consistent world-space height
+      const TEXT_TARGET_HEIGHT = 0.55;
+      const fontSize = Math.min(180, Math.max(32, Math.round(TEXT_TARGET_HEIGHT / planeD * 512)));
+      const floorTex = createFloorLabelTexture(title, fontSize);
+
       const labelGeo = new THREE.PlaneGeometry(planeW, planeD);
       const labelMat = new THREE.MeshBasicMaterial({
         map: floorTex,
         transparent: true,
         depthWrite: false,
+        depthTest: false,
         side: THREE.DoubleSide,
       });
       const floorPlane = new THREE.Mesh(labelGeo, labelMat);
       floorPlane.rotation.x = -Math.PI / 2;
-      floorPlane.position.set(cx, 0.02, cz + depth * 0.25);
+      const labelZ = cz + Math.max(0, depth / 2 - 0.3);
+      floorPlane.position.set(cx, 0.02, labelZ);
       floorPlane.userData.isLabel = true;
-      floorPlane.renderOrder = 1;
+      floorPlane.renderOrder = 5;
       sgGroup.add(floorPlane);
 
       this.group.add(sgGroup);
