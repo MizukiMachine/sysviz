@@ -3,11 +3,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ResourceMeshFactory } from './ResourceMeshes.js';
 import { ConnectionLineManager } from './ConnectionLines.js';
 import { ParticleTrafficSystem } from './ParticleTraffic.js';
-import type { VisualizationConnection, VisualizationNode, VisualizationRoute, VisualizationResourceStatus } from '@/types/visualization';
+import type { ClusterBounds, VisualizationConnection, VisualizationNode, VisualizationRoute, VisualizationResourceStatus } from '@/types/visualization';
 
 const BACKGROUND_COLOR = 0xfafafa;
 const HIGHLIGHT_COLOR = 0xbfdbfe;
 const SELECT_COLOR = 0xfbcfe8;
+const CAMERA_FRAME_PADDING = 1.35;
 
 type MeshEffect = 'default' | 'selected' | 'hovered';
 type PickableObject = THREE.Object3D;
@@ -541,6 +542,63 @@ export class ClusterRenderer {
 
   addTrafficRoute(route: VisualizationRoute): void {
     this.particleTraffic.addRoute(route);
+  }
+
+  frameResources(clusterBounds?: Map<string, ClusterBounds>): void {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+
+    for (const group of this.resourceMeshes.values()) {
+      minX = Math.min(minX, group.position.x);
+      maxX = Math.max(maxX, group.position.x);
+      minZ = Math.min(minZ, group.position.z);
+      maxZ = Math.max(maxZ, group.position.z);
+    }
+
+    for (const bounds of clusterBounds?.values() ?? []) {
+      minX = Math.min(minX, bounds.minX);
+      maxX = Math.max(maxX, bounds.maxX);
+      minZ = Math.min(minZ, bounds.minZ);
+      maxZ = Math.max(maxZ, bounds.maxZ);
+    }
+
+    if (!Number.isFinite(minX)) {
+      this.resetCamera();
+      return;
+    }
+
+    const cx = (minX + maxX) / 2;
+    const cz = (minZ + maxZ) / 2;
+    const paddedWidth = Math.max(maxX - minX + 8, 12);
+    const paddedDepth = Math.max(maxZ - minZ + 8, 12);
+    const aspect = this.camera.aspect || this.canvas.clientWidth / Math.max(this.canvas.clientHeight, 1) || 1;
+    const halfFov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
+    const tanHalfFov = Math.tan(halfFov);
+
+    const distanceForWidth = (paddedWidth / 2) / Math.max(tanHalfFov * aspect, 0.001);
+    const distanceForDepth = (paddedDepth / 2) / Math.max(tanHalfFov, 0.001);
+    const distance = Math.max(distanceForWidth, distanceForDepth, 15) * CAMERA_FRAME_PADDING;
+    const elevation = THREE.MathUtils.degToRad(35);
+
+    const target = new THREE.Vector3(cx, 0, cz);
+    const position = new THREE.Vector3(
+      cx,
+      distance * Math.sin(elevation) + 2,
+      cz + distance * Math.cos(elevation),
+    );
+
+    this.controls.maxDistance = Math.max(80, position.distanceTo(target) * 2);
+    this.camera.far = Math.max(500, position.distanceTo(target) * 4);
+    this.camera.position.copy(position);
+    this.controls.target.copy(target);
+    this.camera.lookAt(target);
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+
+    this._initialCameraPosition.copy(this.camera.position);
+    this._initialCameraTarget.copy(this.controls.target);
   }
 
   removeTrafficRoute(routeId: string): void {

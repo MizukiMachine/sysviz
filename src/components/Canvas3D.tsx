@@ -114,13 +114,7 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
         sg.render(view.subgraphs, view.nodeSubgraphs, renderer.resourceMeshes, view.clusterBounds);
       }
 
-      if (view.camera) {
-        renderer.camera.position.set(...view.camera.position);
-        renderer.controls.target.set(...view.camera.target);
-      } else {
-        renderer.resetCamera();
-      }
-      renderer.controls.update();
+      renderer.frameResources(view.clusterBounds);
     },
     [clearScene]
   );

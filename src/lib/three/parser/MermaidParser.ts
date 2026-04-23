@@ -150,6 +150,12 @@ interface SvgNodePosition {
   x: number;
   /** Mermaid SVG y coordinate (vertical in SVG) */
   y: number;
+  /** Rendered SVG node width, when Mermaid exposes a shape size */
+  width: number | null;
+  /** Rendered SVG node height, when Mermaid exposes a shape size */
+  height: number | null;
+  className: string;
+  dataId: string | null;
 }
 
 interface SvgLayoutPositions {
@@ -691,17 +697,21 @@ export class MermaidParser {
    */
   private _parseSvgPositions(svgDoc: Document): SvgLayoutPositions {
     const nodePositions = new Map<string, SvgNodePosition>();
-    const allGroups = svgDoc.querySelectorAll<SVGGElement>('g[id]');
+    const allGroups = svgDoc.querySelectorAll<SVGGElement>('g.node[id]');
 
     for (const g of allGroups) {
-      const classList = g.getAttribute('class') || '';
-      if (classList.includes('node') || classList.includes('default')) {
-        const svgElId = g.getAttribute('id');
-        if (!svgElId) continue;
-        const translate = this._parseTranslate(g.getAttribute('transform'));
-        if (translate) {
-          nodePositions.set(svgElId, translate);
+      const svgElId = g.getAttribute('id');
+      if (!svgElId) continue;
+      const translate = this._parseCumulativeTranslate(g);
+      if (translate) {
+        translate.className = g.getAttribute('class') || '';
+        translate.dataId = g.getAttribute('data-id');
+        const size = this._parseSvgNodeSize(g);
+        if (size) {
+          translate.width = size.width;
+          translate.height = size.height;
         }
+        nodePositions.set(svgElId, translate);
       }
     }
 
@@ -715,7 +725,73 @@ export class MermaidParser {
     const x = Number(translateMatch[1]);
     const y = Number(translateMatch[2]);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return { x, y };
+    return { x, y, width: null, height: null, className: '', dataId: null };
+  }
+
+  private _parseCumulativeTranslate(g: SVGGElement): SvgNodePosition | null {
+    let x = 0;
+    let y = 0;
+    let found = false;
+    let current: Element | null = g;
+
+    while (current && current.tagName.toLowerCase() !== 'svg') {
+      const local = this._parseTranslate(current.getAttribute('transform'));
+      if (local) {
+        x += local.x;
+        y += local.y;
+        found = true;
+      }
+      current = current.parentElement;
+    }
+
+    if (!found) return null;
+    return { x, y, width: null, height: null, className: '', dataId: null };
+  }
+
+  private _parseSvgNodeSize(g: SVGGElement): { width: number; height: number } | null {
+    const rect = g.querySelector<SVGRectElement>('rect');
+    if (rect) {
+      const width = Number(rect.getAttribute('width'));
+      const height = Number(rect.getAttribute('height'));
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        return { width, height };
+      }
+    }
+
+    const circle = g.querySelector<SVGCircleElement>('circle');
+    if (circle) {
+      const r = Number(circle.getAttribute('r'));
+      if (Number.isFinite(r) && r > 0) return { width: r * 2, height: r * 2 };
+    }
+
+    const ellipse = g.querySelector<SVGEllipseElement>('ellipse');
+    if (ellipse) {
+      const rx = Number(ellipse.getAttribute('rx'));
+      const ry = Number(ellipse.getAttribute('ry'));
+      if (Number.isFinite(rx) && Number.isFinite(ry) && rx > 0 && ry > 0) {
+        return { width: rx * 2, height: ry * 2 };
+      }
+    }
+
+    const polygon = g.querySelector<SVGPolygonElement>('polygon');
+    const pointsAttr = polygon?.getAttribute('points');
+    if (pointsAttr) {
+      const points = pointsAttr
+        .trim()
+        .split(/\s+/)
+        .map((point) => point.split(',').map(Number))
+        .filter(([px, py]) => Number.isFinite(px) && Number.isFinite(py));
+      if (points.length > 0) {
+        const xs = points.map(([px]) => px);
+        const ys = points.map(([, py]) => py);
+        return {
+          width: Math.max(...xs) - Math.min(...xs),
+          height: Math.max(...ys) - Math.min(...ys),
+        };
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -732,11 +808,33 @@ export class MermaidParser {
   ): Map<string, ClusterBounds> {
     const clusterBounds = new Map<string, ClusterBounds>();
 
-    const nodeLookup = new Map<string, { x: number; y: number }>();
+    const nodeLookup = new Map<string, SvgNodePosition>();
+    const resolvedRows: Array<{
+      id: string;
+      svgElId: string;
+      dataId: string | null;
+      className: string;
+      svgX: number;
+      svgY: number;
+      width: number | null;
+      height: number | null;
+    }> = [];
     for (const [originalId, svgElId] of idMap.entries()) {
       const pos = svgPositions.nodePositions.get(svgElId);
       if (pos) {
         nodeLookup.set(originalId, pos);
+        if (nodes.some((node) => node.id === originalId)) {
+          resolvedRows.push({
+            id: originalId,
+            svgElId,
+            dataId: pos.dataId,
+            className: pos.className,
+            svgX: Number(pos.x.toFixed(2)),
+            svgY: Number(pos.y.toFixed(2)),
+            width: pos.width ? Number(pos.width.toFixed(2)) : null,
+            height: pos.height ? Number(pos.height.toFixed(2)) : null,
+          });
+        }
       }
     }
 
@@ -746,6 +844,8 @@ export class MermaidParser {
     }
 
     const rawPositions = new Map<string, FlowPosition>();
+    const rawNodeWidths: number[] = [];
+    const rawNodeHeights: number[] = [];
 
     let rawMinX = Infinity;
     let rawMaxX = -Infinity;
@@ -755,29 +855,37 @@ export class MermaidParser {
     for (const node of nodes) {
       const svgPos = nodeLookup.get(node.id);
       if (svgPos) {
-        const { x: r3x, z: r3z } = this._svgPointToFlowPosition(svgPos, direction);
+        const { x: r3x, z: r3z } = this._svgPointToFlowPosition(svgPos);
         rawPositions.set(node.id, { x: r3x, z: r3z });
         rawMinX = Math.min(rawMinX, r3x);
         rawMaxX = Math.max(rawMaxX, r3x);
         rawMinZ = Math.min(rawMinZ, r3z);
         rawMaxZ = Math.max(rawMaxZ, r3z);
+        if (svgPos.width && svgPos.width > 0) rawNodeWidths.push(svgPos.width);
+        if (svgPos.height && svgPos.height > 0) rawNodeHeights.push(svgPos.height);
       }
     }
 
     if (!Number.isFinite(rawMinX)) return clusterBounds;
 
-    // Non-uniform scaling: flow direction fits TARGET_MAX_EXTENT, cross direction
-    // uses its own target so it isn't crushed when the flow direction has a
-    // much larger SVG extent (e.g. TB charts with many subgraph rows).
-    const TARGET_MAX_EXTENT = 50;
-    const CROSS_TARGET_MAX_EXTENT = 9;
-    const MAX_ASPECT_RATIO = 6.0;
     const rawExtentX = rawMaxX - rawMinX;
     const rawExtentZ = rawMaxZ - rawMinZ;
-    const flowScale = Math.min(0.8, TARGET_MAX_EXTENT / Math.max(rawExtentX, 1));
-    const crossScaleRaw = CROSS_TARGET_MAX_EXTENT / Math.max(rawExtentZ, 1);
-    const minCrossScale = flowScale / MAX_ASPECT_RATIO;
-    const crossScale = Math.max(minCrossScale, Math.min(0.8, crossScaleRaw));
+    const aspect = rawExtentX / Math.max(rawExtentZ, 1);
+    const medianRawWidth = this._median(rawNodeWidths);
+    const medianRawHeight = this._median(rawNodeHeights);
+
+    // Mermaid's rendered SVG is the source of truth. Use one uniform scale so
+    // the 3D ground-plane projection preserves the 2D diagram's aspect ratio.
+    // Size the SVG-to-world conversion from rendered Mermaid node dimensions,
+    // not from total diagram extent. Otherwise large diagrams collapse center
+    // spacing while fixed-size 3D node meshes stay large and overlap.
+    const TARGET_NODE_WORLD_WIDTH = 4.4;
+    const TARGET_NODE_WORLD_HEIGHT = 1.6;
+    const scaleCandidates = [
+      medianRawWidth ? TARGET_NODE_WORLD_WIDTH / medianRawWidth : null,
+      medianRawHeight ? TARGET_NODE_WORLD_HEIGHT / medianRawHeight : null,
+    ].filter((value): value is number => value !== null && Number.isFinite(value) && value > 0);
+    const scale = this._median(scaleCandidates) ?? 0.03;
 
     const rawCX = (rawMinX + rawMaxX) / 2;
     const rawCZ = (rawMinZ + rawMaxZ) / 2;
@@ -785,15 +893,27 @@ export class MermaidParser {
     for (const node of nodes) {
       const raw = rawPositions.get(node.id);
       if (raw) {
-        node.x = (raw.x - rawCX) * flowScale;
-        node.z = (raw.z - rawCZ) * crossScale;
+        node.x = (raw.x - rawCX) * scale;
+        node.z = (raw.z - rawCZ) * scale;
         node.y = 0;
       }
     }
 
-    // Add extra spacing between different subgraph groups in 3D space
-    // (after scaling) to prevent subgraph floor planes from overlapping.
-    this._separateSubgraphGroups3D(nodes, nodeSubgraphs);
+    this._logLayoutDiagnostics({
+      direction,
+      rawExtentX,
+      rawExtentZ,
+      aspect,
+      scale,
+      medianRawWidth,
+      medianRawHeight,
+      nodes,
+      resolvedRows,
+    });
+
+    // Keep Mermaid's SVG layout intact. Extra 3D-only subgraph separation would
+    // change the spatial relationships users see in the original 2D diagram.
+    // this._separateSubgraphGroups3D(nodes, nodeSubgraphs);
 
     return this._computeClusterBoundsFromNodes(nodes, nodeSubgraphs);
   }
@@ -862,11 +982,94 @@ export class MermaidParser {
     }
   }
 
-  private _svgPointToFlowPosition(svgPos: SvgNodePosition, direction: MermaidDirection): FlowPosition {
-    if (direction === 'LR' || direction === 'RL') {
-      return { x: svgPos.x, z: svgPos.y };
+  private _median(values: number[]): number | null {
+    if (values.length === 0) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  }
+
+  private _logLayoutDiagnostics(args: {
+    direction: MermaidDirection;
+    rawExtentX: number;
+    rawExtentZ: number;
+    aspect: number;
+    scale: number;
+    medianRawWidth: number | null;
+    medianRawHeight: number | null;
+    nodes: MermaidNode[];
+    resolvedRows: Array<{
+      id: string;
+      svgElId: string;
+      dataId: string | null;
+      className: string;
+      svgX: number;
+      svgY: number;
+      width: number | null;
+      height: number | null;
+    }>;
+  }): void {
+    const { direction, rawExtentX, rawExtentZ, aspect, scale, medianRawWidth, medianRawHeight, nodes, resolvedRows } = args;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x);
+      maxX = Math.max(maxX, node.x);
+      minZ = Math.min(minZ, node.z);
+      maxZ = Math.max(maxZ, node.z);
     }
-    return { x: svgPos.y, z: svgPos.x };
+
+    let nearest: { a: string; b: string; dist: number; dx: number; dz: number } | null = null;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i];
+        const b = nodes[j];
+        const dx = Math.abs(a.x - b.x);
+        const dz = Math.abs(a.z - b.z);
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (!nearest || dist < nearest.dist) {
+          nearest = { a: a.id, b: b.id, dist, dx, dz };
+        }
+      }
+    }
+
+    console.groupCollapsed(`[MermaidParser] layout direction=${direction} nodes=${nodes.length}`);
+    console.debug({
+      rawExtentX: Number(rawExtentX.toFixed(2)),
+      rawExtentZ: Number(rawExtentZ.toFixed(2)),
+      aspect: Number(aspect.toFixed(2)),
+      medianRawWidth: medianRawWidth ? Number(medianRawWidth.toFixed(2)) : null,
+      medianRawHeight: medianRawHeight ? Number(medianRawHeight.toFixed(2)) : null,
+      scale: Number(scale.toFixed(5)),
+      worldExtentX: Number((maxX - minX).toFixed(2)),
+      worldExtentZ: Number((maxZ - minZ).toFixed(2)),
+      nearestPair: nearest
+        ? {
+            ...nearest,
+            dist: Number(nearest.dist.toFixed(2)),
+            dx: Number(nearest.dx.toFixed(2)),
+            dz: Number(nearest.dz.toFixed(2)),
+          }
+        : null,
+      fixedMeshReference: {
+        defaultBodyWidth: 2.8,
+        labelWidth: 4.2,
+        sphereDiameter: 2.0,
+      },
+    });
+    console.table(nodes.map((node) => ({
+      id: node.id,
+      x: Number(node.x.toFixed(2)),
+      z: Number(node.z.toFixed(2)),
+    })));
+    console.table(resolvedRows);
+    console.groupEnd();
+  }
+
+  private _svgPointToFlowPosition(svgPos: SvgNodePosition): FlowPosition {
+    return { x: svgPos.x, z: svgPos.y };
   }
 
   private _computeClusterBoundsFromNodes(
