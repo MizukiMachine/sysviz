@@ -5,7 +5,7 @@ const FLOOR_COLOR = 0xf0f4f8;
 const FLOOR_OPACITY = 0.3;
 const BORDER_COLOR = 0x94a3b8;
 const BORDER_OPACITY = 0.5;
-const PADDING = 0.8;
+const FALLBACK_PADDING = 0.8;
 
 interface SubgraphEntry {
   group: THREE.Group;
@@ -25,17 +25,29 @@ function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTe
   canvas.height = cH;
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
-  const underlineOffset = Math.round(fontSize * 0.67);
+  const lines = text
+    .split(/<br\s*\/?>/i)
+    .map((line) => line.replace(/<[^>]+>/g, '').trim())
+    .filter(Boolean);
+  const safeLines = lines.length > 0 ? lines : [text.replace(/<[^>]+>/g, '').trim()];
+  const lineHeight = Math.round(fontSize * 1.25);
+  const textBlockHeight = lineHeight * safeLines.length;
+  const startY = cH / 2 - textBlockHeight / 2 + lineHeight / 2;
+  const underlineOffset = Math.round(textBlockHeight / 2 + fontSize * 0.2);
 
   ctx.clearRect(0, 0, cW, cH);
   ctx.fillStyle = 'rgba(51, 65, 85, 0.85)';
   ctx.font = `700 ${fontSize}px "Inter", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, cW / 2, cH / 2, cW - 60);
+  for (const [index, line] of safeLines.entries()) {
+    ctx.fillText(line, cW / 2, startY + index * lineHeight, cW - 60);
+  }
 
-  const metrics = ctx.measureText(text);
-  const lineW = Math.min(metrics.width, cW - 60);
+  const lineW = Math.min(
+    Math.max(...safeLines.map((line) => ctx.measureText(line).width), 0),
+    cW - 60,
+  );
   ctx.strokeStyle = 'rgba(51, 65, 85, 0.5)';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -113,8 +125,8 @@ export class SubgraphRenderer {
         }
       }
 
-      const width = maxX - minX + PADDING * 2;
-      const depth = maxZ - minZ + PADDING * 2;
+      const width = maxX - minX + (svgBounds ? 0 : FALLBACK_PADDING * 2);
+      const depth = maxZ - minZ + (svgBounds ? 0 : FALLBACK_PADDING * 2);
       const cx = (minX + maxX) / 2;
       const cz = (minZ + maxZ) / 2;
 
@@ -148,17 +160,14 @@ export class SubgraphRenderer {
 
       const title = sg.title || sg.id;
 
-      const scaleFactor = members.length === 1 ? 1.8 : 1;
-      const texAspect = 2;
-      let planeW: number;
-      let planeD: number;
-      if ((width * scaleFactor) / (depth * scaleFactor) > texAspect) {
-        planeD = depth * scaleFactor;
-        planeW = planeD * texAspect;
-      } else {
-        planeW = width * scaleFactor;
-        planeD = planeW / texAspect;
-      }
+      const planeW = Math.min(
+        Math.max(svgBounds?.labelWidth ?? width * (members.length === 1 ? 1.4 : 0.5), 2.4),
+        Math.max(width - 0.4, 2.4),
+      );
+      const planeD = Math.max(
+        Math.min(svgBounds?.labelHeight ?? 0.7, Math.max(depth - 0.4, 0.7)),
+        0.55,
+      );
 
       // Normalize font size so text appears at consistent world-space height
       const TEXT_TARGET_HEIGHT = 0.55;
@@ -175,8 +184,9 @@ export class SubgraphRenderer {
       });
       const floorPlane = new THREE.Mesh(labelGeo, labelMat);
       floorPlane.rotation.x = -Math.PI / 2;
-      const labelZ = cz + Math.max(0, depth / 2 - 0.3);
-      floorPlane.position.set(cx, 0.02, labelZ);
+      const labelX = svgBounds?.labelCenterX ?? cx;
+      const labelZ = svgBounds?.labelCenterZ ?? cz + Math.max(0, depth / 2 - 0.3);
+      floorPlane.position.set(labelX, 0.02, labelZ);
       floorPlane.userData.isLabel = true;
       floorPlane.renderOrder = 5;
       sgGroup.add(floorPlane);

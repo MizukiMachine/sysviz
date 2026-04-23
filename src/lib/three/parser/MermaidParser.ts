@@ -160,11 +160,20 @@ interface SvgNodePosition {
 
 interface SvgLayoutPositions {
   nodePositions: Map<string, SvgNodePosition>;
+  clusterBounds: Map<string, SvgRectBounds>;
+  clusterLabelBounds: Map<string, SvgRectBounds>;
 }
 
 interface FlowPosition {
   x: number;
   z: number;
+}
+
+interface SvgRectBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 type BuildRoutesFn = ViewConfig['buildRoutes'];
@@ -697,6 +706,8 @@ export class MermaidParser {
    */
   private _parseSvgPositions(svgDoc: Document): SvgLayoutPositions {
     const nodePositions = new Map<string, SvgNodePosition>();
+    const clusterBounds = new Map<string, SvgRectBounds>();
+    const clusterLabelBounds = new Map<string, SvgRectBounds>();
     const allGroups = svgDoc.querySelectorAll<SVGGElement>('g.node[id]');
 
     for (const g of allGroups) {
@@ -715,7 +726,24 @@ export class MermaidParser {
       }
     }
 
-    return { nodePositions };
+    const clusterGroups = svgDoc.querySelectorAll<SVGGElement>('g.cluster[id]');
+    for (const g of clusterGroups) {
+      const svgElId = g.getAttribute('id');
+      if (!svgElId) continue;
+
+      const rect = g.querySelector<SVGRectElement>('rect');
+      const rectBounds = rect ? this._parseSvgRectBounds(rect) : null;
+      if (rectBounds) {
+        clusterBounds.set(svgElId, rectBounds);
+      }
+
+      const labelBounds = this._parseSvgClusterLabelBounds(g);
+      if (labelBounds) {
+        clusterLabelBounds.set(svgElId, labelBounds);
+      }
+    }
+
+    return { nodePositions, clusterBounds, clusterLabelBounds };
   }
 
   private _parseTranslate(transform: string | null): SvgNodePosition | null {
@@ -794,6 +822,57 @@ export class MermaidParser {
     return null;
   }
 
+  private _parseSvgRectBounds(rect: SVGRectElement): SvgRectBounds | null {
+    const x = Number(rect.getAttribute('x') ?? 0);
+    const y = Number(rect.getAttribute('y') ?? 0);
+    const width = Number(rect.getAttribute('width'));
+    const height = Number(rect.getAttribute('height'));
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+      return null;
+    }
+
+    const translate = this._parseCumulativeTranslate(rect);
+    const tx = translate?.x ?? 0;
+    const ty = translate?.y ?? 0;
+
+    return { x: x + tx, y: y + ty, width, height };
+  }
+
+  private _parseSvgClusterLabelBounds(clusterGroup: SVGGElement): SvgRectBounds | null {
+    const labelGroup = clusterGroup.querySelector<SVGGElement>('g.cluster-label');
+    if (!labelGroup) return null;
+
+    const translate = this._parseCumulativeTranslate(labelGroup);
+    if (!translate) return null;
+
+    const foreignObject = labelGroup.querySelector<SVGForeignObjectElement>('foreignObject');
+    if (foreignObject) {
+      const width = Number(foreignObject.getAttribute('width'));
+      const height = Number(foreignObject.getAttribute('height'));
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        return { x: translate.x, y: translate.y, width, height };
+      }
+    }
+
+    const text = labelGroup.querySelector<SVGTextElement>('text');
+    if (text) {
+      const x = Number(text.getAttribute('x') ?? 0);
+      const y = Number(text.getAttribute('y') ?? 0);
+      const width = Number(text.getAttribute('data-width'));
+      const height = Number(text.getAttribute('data-height'));
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        return {
+          x: translate.x + x,
+          y: translate.y + y - height,
+          width,
+          height,
+        };
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Map SVG coordinates to 3D world coordinates using non-uniform scaling.
    * Scaling runs before 3D subgraph gap insertion, and cluster bounds are then
@@ -809,6 +888,8 @@ export class MermaidParser {
     const clusterBounds = new Map<string, ClusterBounds>();
 
     const nodeLookup = new Map<string, SvgNodePosition>();
+    const rawClusterBounds = new Map<string, SvgRectBounds>();
+    const rawClusterLabelBounds = new Map<string, SvgRectBounds>();
     const resolvedRows: Array<{
       id: string;
       svgElId: string;
@@ -835,6 +916,16 @@ export class MermaidParser {
             height: pos.height ? Number(pos.height.toFixed(2)) : null,
           });
         }
+      }
+
+      const clusterRect = svgPositions.clusterBounds.get(svgElId);
+      if (clusterRect) {
+        rawClusterBounds.set(originalId, clusterRect);
+      }
+
+      const clusterLabel = svgPositions.clusterLabelBounds.get(svgElId);
+      if (clusterLabel) {
+        rawClusterLabelBounds.set(originalId, clusterLabel);
       }
     }
 
@@ -899,23 +990,72 @@ export class MermaidParser {
       }
     }
 
-    this._logLayoutDiagnostics({
-      direction,
-      rawExtentX,
-      rawExtentZ,
-      aspect,
-      scale,
-      medianRawWidth,
-      medianRawHeight,
-      nodes,
-      resolvedRows,
-    });
+    if (this._shouldLogLayoutDiagnostics()) {
+      this._logLayoutDiagnostics({
+        direction,
+        rawExtentX,
+        rawExtentZ,
+        aspect,
+        scale,
+        medianRawWidth,
+        medianRawHeight,
+        nodes,
+        resolvedRows,
+      });
+    }
 
     // Keep Mermaid's SVG layout intact. Extra 3D-only subgraph separation would
     // change the spatial relationships users see in the original 2D diagram.
     // this._separateSubgraphGroups3D(nodes, nodeSubgraphs);
 
-    return this._computeClusterBoundsFromNodes(nodes, nodeSubgraphs);
+    for (const [clusterId, rawRect] of rawClusterBounds.entries()) {
+      const min = this._svgPointToFlowPosition({ x: rawRect.x, y: rawRect.y, width: null, height: null, className: '', dataId: null });
+      const max = this._svgPointToFlowPosition({
+        x: rawRect.x + rawRect.width,
+        y: rawRect.y + rawRect.height,
+        width: null,
+        height: null,
+        className: '',
+        dataId: null,
+      });
+
+      const bounds: ClusterBounds = {
+        minX: (Math.min(min.x, max.x) - rawCX) * scale,
+        maxX: (Math.max(min.x, max.x) - rawCX) * scale,
+        minZ: (Math.min(min.z, max.z) - rawCZ) * scale,
+        maxZ: (Math.max(min.z, max.z) - rawCZ) * scale,
+      };
+
+      const rawLabel = rawClusterLabelBounds.get(clusterId);
+      if (rawLabel) {
+        const labelCenter = this._svgPointToFlowPosition({
+          x: rawLabel.x + rawLabel.width / 2,
+          y: rawLabel.y + rawLabel.height / 2,
+          width: null,
+          height: null,
+          className: '',
+          dataId: null,
+        });
+        bounds.labelCenterX = (labelCenter.x - rawCX) * scale;
+        bounds.labelCenterZ = (labelCenter.z - rawCZ) * scale;
+        bounds.labelWidth = rawLabel.width * scale;
+        bounds.labelHeight = rawLabel.height * scale;
+      }
+
+      clusterBounds.set(clusterId, bounds);
+    }
+
+    if (clusterBounds.size === 0) {
+      return this._computeClusterBoundsFromNodes(nodes, nodeSubgraphs);
+    }
+
+    for (const [clusterId, fallback] of this._computeClusterBoundsFromNodes(nodes, nodeSubgraphs)) {
+      if (!clusterBounds.has(clusterId)) {
+        clusterBounds.set(clusterId, fallback);
+      }
+    }
+
+    return clusterBounds;
   }
 
   /**
@@ -1066,6 +1206,15 @@ export class MermaidParser {
     })));
     console.table(resolvedRows);
     console.groupEnd();
+  }
+
+  private _shouldLogLayoutDiagnostics(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem('sysviz.debug.mermaidLayout') === '1';
+    } catch {
+      return false;
+    }
   }
 
   private _svgPointToFlowPosition(svgPos: SvgNodePosition): FlowPosition {

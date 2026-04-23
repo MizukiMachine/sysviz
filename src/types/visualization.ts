@@ -93,6 +93,10 @@ export interface ClusterBounds {
   maxX: number;
   minZ: number;
   maxZ: number;
+  labelCenterX?: number;
+  labelCenterZ?: number;
+  labelWidth?: number;
+  labelHeight?: number;
 }
 
 export interface ViewConfig {
