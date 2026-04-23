@@ -4,6 +4,7 @@ import type {
   ViewConfig,
   VisualizationCamera,
   VisualizationConnection,
+  VisualizationConnectionEndpointKind,
   VisualizationConnectionType,
   VisualizationNode,
   VisualizationRoute,
@@ -105,6 +106,8 @@ interface MermaidConnection extends VisualizationConnection {
   id: string;
   sourceId: string;
   targetId: string;
+  sourceKind: VisualizationConnectionEndpointKind;
+  targetKind: VisualizationConnectionEndpointKind;
   type: VisualizationConnectionType;
   trafficVolume: number;
   _label: string | null;
@@ -132,6 +135,8 @@ interface RawNode {
 interface RawConnection {
   source: string;
   target: string;
+  sourceKind: VisualizationConnectionEndpointKind;
+  targetKind: VisualizationConnectionEndpointKind;
   label: string | null;
   lineStyle: ConnectionLineStyle;
 }
@@ -359,11 +364,8 @@ export class MermaidParser {
         const targetId = edgeM[6];
         const targetLabel = edgeM[7] !== undefined ? edgeM[7] : edgeM[8];
 
-        // Skip edges that use a subgraph as an endpoint. Those edges are valid
-        // Mermaid syntax, but SysViz routes need concrete node meshes.
         const isSourceCluster = subgraphs.has(sourceId) && sourceLabel === undefined;
         const isTargetCluster = subgraphs.has(targetId) && targetLabel === undefined;
-        if (isSourceCluster || isTargetCluster) continue;
 
         if (!isSourceCluster) this._registerInlineNode(rawNodes, sourceId, sourceLabel);
         if (!isTargetCluster) this._registerInlineNode(rawNodes, targetId, targetLabel);
@@ -377,13 +379,15 @@ export class MermaidParser {
         rawConnections.push({
           source: sourceId,
           target: targetId,
+          sourceKind: isSourceCluster ? 'subgraph' : 'node',
+          targetKind: isTargetCluster ? 'subgraph' : 'node',
           label: cleanLabel,
           lineStyle: lineStyle || '-->',
         });
 
         if (currentSubgraph) {
-          if (!nodeSubgraphs.has(sourceId)) nodeSubgraphs.set(sourceId, currentSubgraph);
-          if (!nodeSubgraphs.has(targetId)) nodeSubgraphs.set(targetId, currentSubgraph);
+          if (!isSourceCluster && !nodeSubgraphs.has(sourceId)) nodeSubgraphs.set(sourceId, currentSubgraph);
+          if (!isTargetCluster && !nodeSubgraphs.has(targetId)) nodeSubgraphs.set(targetId, currentSubgraph);
         }
 
         continue;
@@ -585,6 +589,8 @@ export class MermaidParser {
         id: `conn-${rc.source}-${rc.target}`,
         sourceId: rc.source,
         targetId: rc.target,
+        sourceKind: rc.sourceKind,
+        targetKind: rc.targetKind,
         type,
         trafficVolume,
         _label: rc.label,
@@ -1457,6 +1463,7 @@ export class MermaidParser {
 
     const outMap = new Map<string, MermaidConnection[]>();
     for (const connection of connections) {
+      if (connection.sourceKind !== 'node' || connection.targetKind !== 'node') continue;
       if (!outMap.has(connection.sourceId)) outMap.set(connection.sourceId, []);
       outMap.get(connection.sourceId)?.push(connection);
     }
@@ -1512,10 +1519,11 @@ export class MermaidParser {
 
   _createBuildRoutes(nodes: MermaidNode[], connections: MermaidConnection[]): BuildRoutesFn {
     const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-    const lastConnId = connections.length > 0 ? connections[connections.length - 1].id : null;
+    const routeConnections = connections.filter((conn) => conn.sourceKind === 'node' && conn.targetKind === 'node');
+    const lastConnId = routeConnections.length > 0 ? routeConnections[routeConnections.length - 1].id : null;
 
     return function buildRoutes(resourceMeshes: Map<string, THREE.Group>): MermaidRoute[] {
-      return connections.flatMap((conn) => {
+      return routeConnections.flatMap((conn) => {
         const srcMesh = resourceMeshes.get(conn.sourceId);
         const tgtMesh = resourceMeshes.get(conn.targetId);
         if (!srcMesh || !tgtMesh) return [];

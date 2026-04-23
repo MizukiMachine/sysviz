@@ -11,6 +11,7 @@ export type VisualizationConnectionType =
   | 'async'
   | 'signal'
   | (string & {});
+export type VisualizationConnectionEndpointKind = 'node' | 'subgraph';
 export type VisualizationTrafficType = 'healthy' | 'error' | 'slow' | 'default' | (string & {});
 
 export interface VisualizationNode {
@@ -34,6 +35,8 @@ export interface VisualizationConnection {
   id: string;
   sourceId: string;
   targetId: string;
+  sourceKind?: VisualizationConnectionEndpointKind;
+  targetKind?: VisualizationConnectionEndpointKind;
   type?: VisualizationConnectionType;
   trafficVolume?: number;
   _label?: string | null;

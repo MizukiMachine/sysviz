@@ -55,6 +55,7 @@ export class ClusterRenderer {
   meshFactory: ResourceMeshFactory;
   resourceMeshes: Map<string, THREE.Group>;
   connectionLines: ConnectionLineManager;
+  clusterBounds: Map<string, ClusterBounds> | undefined;
   particleTraffic: ParticleTrafficSystem;
   selectedResource: string | null;
   hoveredResource: string | null;
@@ -113,6 +114,7 @@ export class ClusterRenderer {
     this._initLights();
     this._initRaycaster();
     this.connectionLines = new ConnectionLineManager(this.scene);
+    this.clusterBounds = undefined;
     this.particleTraffic = new ParticleTrafficSystem(this.scene);
     this._bindEvents();
   }
@@ -528,16 +530,18 @@ export class ClusterRenderer {
     }
   }
 
-  addConnection(connection: VisualizationConnection): void {
-    this.connectionLines.addConnection(connection, this.resourceMeshes);
+  addConnection(connection: VisualizationConnection, clusterBounds?: Map<string, ClusterBounds>): void {
+    this.clusterBounds = clusterBounds;
+    this.connectionLines.addConnection(connection, this.resourceMeshes, clusterBounds);
   }
 
   removeConnection(connectionId: string): void {
     this.connectionLines.removeConnection(connectionId);
   }
 
-  updateConnections(): void {
-    this.connectionLines.updatePositions(this.resourceMeshes);
+  updateConnections(clusterBounds?: Map<string, ClusterBounds>): void {
+    this.clusterBounds = clusterBounds;
+    this.connectionLines.updatePositions(this.resourceMeshes, clusterBounds);
   }
 
   addTrafficRoute(route: VisualizationRoute): void {
@@ -651,6 +655,7 @@ export class ClusterRenderer {
       this._performPick(false);
     }
 
+    this.connectionLines.updatePositions(this.resourceMeshes, this.clusterBounds);
     this.connectionLines.update(delta);
     this.particleTraffic.update(delta);
     this._animateResources(delta);

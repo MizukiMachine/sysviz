@@ -77,6 +77,7 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
     for (const id of [...renderer.particleTraffic.routes.keys()]) {
       renderer.particleTraffic.removeRoute(id);
     }
+    renderer.clusterBounds = undefined;
     sg.clear();
   }, []);
 
@@ -103,7 +104,7 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
         renderer.addResource(node);
       }
       for (const conn of view.connections) {
-        renderer.addConnection(conn);
+        renderer.addConnection(conn, view.clusterBounds);
       }
       const routes = view.buildRoutes(renderer.resourceMeshes);
       for (const route of routes) {
