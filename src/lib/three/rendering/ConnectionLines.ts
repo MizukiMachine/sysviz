@@ -7,16 +7,16 @@ const RELATIONSHIP_COLORS = {
   storage: 0x6b7280,
   config: 0xd97706,
   sync: 0x6366f1,
-  async: 0x06b6d4,
-  signal: 0xeab308,
+  async: 0x0891b2,
+  signal: 0xa16207,
   default: 0x64748b,
 } as const;
 
 const DASH_CONFIG = {
   network: { dashSize: 0.3, gapSize: 0.15 },
   sync: { dashSize: 0.6, gapSize: 0.08 },
-  async: { dashSize: 0.3, gapSize: 0.2 },
-  signal: { dashSize: 0.08, gapSize: 0.08 },
+  async: { dashSize: 0.35, gapSize: 0.15 },
+  signal: { dashSize: 0.35, gapSize: 0.1 },
   default: { dashSize: 0.3, gapSize: 0.15 },
 } as const;
 
