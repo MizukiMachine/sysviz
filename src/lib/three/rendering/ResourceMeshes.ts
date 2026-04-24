@@ -10,9 +10,9 @@ const STATUS_COLORS = {
 } as const;
 
 const BASE_COLOR = 0xe2e8f0;
-const TEXT_COLOR = '#0f172a';
-const LABEL_BG = 'rgba(255, 255, 255, 0.96)';
-const LABEL_STROKE = 'rgba(15, 23, 42, 0.12)';
+const TEXT_COLOR = '#f8fafc';
+const LABEL_BG = 'rgba(15, 23, 42, 0.82)';
+const LABEL_STROKE = 'rgba(226, 232, 240, 0.45)';
 const _labelTextureCache = new Map<string, THREE.CanvasTexture>();
 
 interface LabelSpriteOptions {
@@ -30,10 +30,49 @@ interface MeshUserData {
   animate?: (time: number, delta?: number) => void;
   isScaled?: boolean;
   halfHeight?: number;
+  labelVariant?: 'short' | 'full' | 'data';
+}
+
+interface ResourceLabelSet {
+  shortName: THREE.Object3D;
+  fullName: THREE.Object3D;
+  dataIn?: THREE.Object3D;
+  dataOut?: THREE.Object3D;
+}
+
+interface LabelTextureOptions {
+  fontSize?: number;
+  width?: number;
+  height?: number;
+  maxTextWidth?: number;
+  fontFamily?: string;
+}
+
+interface LabelPlaneOptions extends LabelTextureOptions {
+  scale?: { x: number; y: number; z: number };
 }
 
 type ResourceGroup = THREE.Group;
 type ResourceCreator = (resource: VisualizationNode) => ResourceGroup;
+
+function shortenLabel(resource: VisualizationNode): string {
+  const preferred = (resource.id || '').trim();
+  if (preferred && preferred.length <= 14) return preferred;
+
+  const name = (resource.name || resource.id || 'Node').trim();
+  if (name.length <= 14) return name;
+
+  const words = name
+    .split(/[\s/_-]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (words.length >= 2) {
+    const initials = words.map((part) => part[0]?.toUpperCase() ?? '').join('');
+    if (initials.length >= 2 && initials.length <= 8) return initials;
+  }
+
+  return `${name.slice(0, 11).trimEnd()}…`;
+}
 
 function getStatusColor(status: VisualizationResourceStatus | undefined): number {
   if (!status) return STATUS_COLORS.default;
@@ -73,52 +112,7 @@ export function createLabelSprite(text: string, options: LabelSpriteOptions = {}
     scale = { x: 4.4, y: 0.78, z: 1 },
     fontFamily = '"Inter", sans-serif',
   } = options;
-  const cacheKey = JSON.stringify({ text, fontSize, width, height, maxTextWidth, fontFamily });
-
-  let texture = _labelTextureCache.get(cacheKey);
-  if (!texture) {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-
-    ctx.clearRect(0, 0, width, height);
-    ctx.font = `600 ${fontSize}px ${fontFamily}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const metrics = ctx.measureText(text);
-    const textWidth = Math.min(metrics.width + 32, width - 12);
-    const boxHeight = Math.min(height - 16, fontSize + 22);
-    const boxX = (width - textWidth) / 2;
-    const boxY = (height - boxHeight) / 2;
-    const radius = 12;
-
-    ctx.fillStyle = LABEL_BG;
-    ctx.beginPath();
-    ctx.moveTo(boxX + radius, boxY);
-    ctx.lineTo(boxX + textWidth - radius, boxY);
-    ctx.quadraticCurveTo(boxX + textWidth, boxY, boxX + textWidth, boxY + radius);
-    ctx.lineTo(boxX + textWidth, boxY + boxHeight - radius);
-    ctx.quadraticCurveTo(boxX + textWidth, boxY + boxHeight, boxX + textWidth - radius, boxY + boxHeight);
-    ctx.lineTo(boxX + radius, boxY + boxHeight);
-    ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
-    ctx.lineTo(boxX, boxY + radius);
-    ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = LABEL_STROKE;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = TEXT_COLOR;
-    ctx.fillText(text, width / 2, height / 2, maxTextWidth);
-
-    texture = new THREE.CanvasTexture(canvas);
-    texture.minFilter = THREE.LinearFilter;
-    _labelTextureCache.set(cacheKey, texture);
-  }
+  const texture = getLabelTexture(text, { fontSize, width, height, maxTextWidth, fontFamily });
 
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
     map: texture,
@@ -131,13 +125,110 @@ export function createLabelSprite(text: string, options: LabelSpriteOptions = {}
   return sprite;
 }
 
-function createBodyMaterial(nodeColor: number, statusColor: number): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
+function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE.CanvasTexture {
+  const {
+    fontSize = 36,
+    width = 768,
+    height = 128,
+    maxTextWidth = width - 32,
+    fontFamily = '"Inter", sans-serif',
+  } = options;
+  const cacheKey = JSON.stringify({ text, fontSize, width, height, maxTextWidth, fontFamily });
+
+  let texture = _labelTextureCache.get(cacheKey);
+  if (texture) return texture;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = `600 ${fontSize}px ${fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const metrics = ctx.measureText(text);
+  const textWidth = Math.min(metrics.width + 32, width - 12);
+  const boxHeight = Math.min(height - 16, fontSize + 22);
+  const boxX = (width - textWidth) / 2;
+  const boxY = (height - boxHeight) / 2;
+  const radius = 12;
+
+  ctx.fillStyle = LABEL_BG;
+  ctx.beginPath();
+  ctx.moveTo(boxX + radius, boxY);
+  ctx.lineTo(boxX + textWidth - radius, boxY);
+  ctx.quadraticCurveTo(boxX + textWidth, boxY, boxX + textWidth, boxY + radius);
+  ctx.lineTo(boxX + textWidth, boxY + boxHeight - radius);
+  ctx.quadraticCurveTo(boxX + textWidth, boxY + boxHeight, boxX + textWidth - radius, boxY + boxHeight);
+  ctx.lineTo(boxX + radius, boxY + boxHeight);
+  ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
+  ctx.lineTo(boxX, boxY + radius);
+  ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = LABEL_STROKE;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = TEXT_COLOR;
+  ctx.shadowColor = 'rgba(15, 23, 42, 0.45)';
+  ctx.shadowBlur = 10;
+  ctx.fillText(text, width / 2, height / 2, maxTextWidth);
+  ctx.shadowBlur = 0;
+
+  texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  _labelTextureCache.set(cacheKey, texture);
+  return texture;
+}
+
+function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.Mesh {
+  const {
+    fontSize = 36,
+    width = 768,
+    height = 128,
+    maxTextWidth = width - 32,
+    scale = { x: 2.15, y: 0.54, z: 1 },
+    fontFamily = '"Inter", sans-serif',
+  } = options;
+
+  const texture = getLabelTexture(text, { fontSize, width, height, maxTextWidth, fontFamily });
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(scale.x, scale.y),
+    new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.96,
+      depthTest: false,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      side: THREE.DoubleSide,
+    }),
+  );
+  const userData = plane.userData as MeshUserData;
+  userData.isLabel = true;
+  plane.renderOrder = 6;
+  return plane;
+}
+
+function createBodyMaterial(nodeColor: number, statusColor: number): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({
     color: nodeColor,
     metalness: 0.15,
-    roughness: 0.42,
+    roughness: 0.28,
     emissive: new THREE.Color(statusColor),
-    emissiveIntensity: 0.14,
+    emissiveIntensity: 0.12,
+    transparent: true,
+    opacity: 0.82,
+    transmission: 0.04,
+    clearcoat: 0.28,
+    clearcoatRoughness: 0.3,
   });
 }
 
@@ -146,42 +237,77 @@ function createEdgeLines(geometry: THREE.BufferGeometry): THREE.LineSegments {
   const edgeMaterial = new THREE.LineBasicMaterial({
     color: 0x64748b,
     transparent: true,
-    opacity: 1.0,
+    opacity: 0.38,
   });
   return new THREE.LineSegments(edgeGeometry, edgeMaterial);
 }
 
-function addResourceElements(group: ResourceGroup, resource: VisualizationNode, _statusColor: number): void {
-  const nameLabel = createLabelSprite(resource.name || resource.id || 'Node', {
-    fontSize: 42,
+function addResourceElements(
+  group: ResourceGroup,
+  resource: VisualizationNode,
+  _statusColor: number,
+  layout: {
+    nameY: number;
+    nameZ: number;
+    nameScale: { x: number; y: number; z: number };
+    dataInY: number;
+    dataOutY: number;
+    dataZ: number;
+    dataScale: { x: number; y: number; z: number };
+  },
+): void {
+  const shortNameLabel = createLabelSprite(shortenLabel(resource), {
+    fontSize: 38,
     width: 768,
-    height: 144,
-    scale: { x: 4.2, y: 0.82, z: 1 },
+    height: 156,
+    scale: { x: layout.nameScale.x * 1.18, y: layout.nameScale.y * 1.15, z: 1 },
   });
-  nameLabel.position.set(0, 1.28, 0);
-  group.add(nameLabel);
+  (shortNameLabel.userData as MeshUserData).labelVariant = 'short';
+  shortNameLabel.position.set(0, layout.nameY, layout.nameZ);
+  group.add(shortNameLabel);
+
+  const fullNameLabel = createLabelSprite(resource.name || resource.id || 'Node', {
+    fontSize: 42,
+    width: 1024,
+    height: 192,
+    scale: { x: layout.nameScale.x * 1.42, y: layout.nameScale.y * 1.28, z: 1 },
+  });
+  (fullNameLabel.userData as MeshUserData).labelVariant = 'full';
+  fullNameLabel.position.set(0, layout.nameY, layout.nameZ);
+  group.add(fullNameLabel);
+
+  const labels: ResourceLabelSet = {
+    shortName: shortNameLabel,
+    fullName: fullNameLabel,
+  };
 
   if (resource.dataIn) {
     const dataInLabel = createLabelSprite(`IN: ${resource.dataIn}`, {
-      fontSize: 24,
+      fontSize: 20,
       width: 1024,
       height: 128,
-      scale: { x: 4.2, y: 0.56, z: 1 },
+      scale: { x: layout.dataScale.x * 1.22, y: layout.dataScale.y * 1.18, z: 1 },
     });
-    dataInLabel.position.set(0, -0.02, 0.36);
+    (dataInLabel.userData as MeshUserData).labelVariant = 'data';
+    dataInLabel.position.set(0, layout.dataInY, layout.dataZ);
     group.add(dataInLabel);
+    labels.dataIn = dataInLabel;
   }
 
   if (resource.dataOut) {
     const dataOutLabel = createLabelSprite(`OUT: ${resource.dataOut}`, {
-      fontSize: 24,
+      fontSize: 20,
       width: 1024,
       height: 128,
-      scale: { x: 4.2, y: 0.56, z: 1 },
+      scale: { x: layout.dataScale.x * 1.22, y: layout.dataScale.y * 1.18, z: 1 },
     });
-    dataOutLabel.position.set(0, -0.68, 0.36);
+    (dataOutLabel.userData as MeshUserData).labelVariant = 'data';
+    dataOutLabel.position.set(0, layout.dataOutY, layout.dataZ);
     group.add(dataOutLabel);
+    labels.dataOut = dataOutLabel;
   }
+
+  group.userData.labels = labels;
 
   const idleY = resource.y || 0;
   const userData = group.userData as MeshUserData;
@@ -202,7 +328,15 @@ function createDefaultResource(resource: VisualizationNode): ResourceGroup {
   group.add(body);
   group.add(createEdgeLines(geometry));
 
-  addResourceElements(group, resource, statusColor);
+  addResourceElements(group, resource, statusColor, {
+    nameY: 1.24,
+    nameZ: 0.02,
+    nameScale: { x: 2.7, y: 0.72, z: 1 },
+    dataInY: 0.42,
+    dataOutY: -0.08,
+    dataZ: 0.04,
+    dataScale: { x: 3.0, y: 0.4, z: 1 },
+  });
   return group;
 }
 
@@ -216,7 +350,15 @@ function createSphereResource(resource: VisualizationNode): ResourceGroup {
   group.add(body);
   group.add(createEdgeLines(geometry));
 
-  addResourceElements(group, resource, statusColor);
+  addResourceElements(group, resource, statusColor, {
+    nameY: 1.45,
+    nameZ: 0.04,
+    nameScale: { x: 2.0, y: 0.56, z: 1 },
+    dataInY: 0.54,
+    dataOutY: 0.16,
+    dataZ: 0.04,
+    dataScale: { x: 2.25, y: 0.34, z: 1 },
+  });
   return group;
 }
 
@@ -230,7 +372,15 @@ function createCylinderResource(resource: VisualizationNode): ResourceGroup {
   group.add(body);
   group.add(createEdgeLines(geometry));
 
-  addResourceElements(group, resource, statusColor);
+  addResourceElements(group, resource, statusColor, {
+    nameY: 1.32,
+    nameZ: 0.04,
+    nameScale: { x: 2.15, y: 0.56, z: 1 },
+    dataInY: 0.42,
+    dataOutY: 0.04,
+    dataZ: 0.04,
+    dataScale: { x: 2.5, y: 0.34, z: 1 },
+  });
   return group;
 }
 
@@ -244,7 +394,15 @@ function createDiamondResource(resource: VisualizationNode): ResourceGroup {
   group.add(body);
   group.add(createEdgeLines(geometry));
 
-  addResourceElements(group, resource, statusColor);
+  addResourceElements(group, resource, statusColor, {
+    nameY: 1.42,
+    nameZ: 0.04,
+    nameScale: { x: 2.0, y: 0.56, z: 1 },
+    dataInY: 0.5,
+    dataOutY: 0.12,
+    dataZ: 0.04,
+    dataScale: { x: 2.2, y: 0.34, z: 1 },
+  });
   return group;
 }
 
@@ -258,7 +416,15 @@ function createTorusResource(resource: VisualizationNode): ResourceGroup {
   group.add(body);
   group.add(createEdgeLines(geometry));
 
-  addResourceElements(group, resource, statusColor);
+  addResourceElements(group, resource, statusColor, {
+    nameY: 1.36,
+    nameZ: 0.04,
+    nameScale: { x: 2.05, y: 0.56, z: 1 },
+    dataInY: 0.48,
+    dataOutY: 0.12,
+    dataZ: 0.04,
+    dataScale: { x: 2.25, y: 0.34, z: 1 },
+  });
   return group;
 }
 

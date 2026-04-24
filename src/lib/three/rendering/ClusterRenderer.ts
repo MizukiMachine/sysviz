@@ -9,6 +9,8 @@ const BACKGROUND_COLOR = 0xfafafa;
 const HIGHLIGHT_COLOR = 0xbfdbfe;
 const SELECT_COLOR = 0xfbcfe8;
 const CAMERA_FRAME_PADDING = 1.35;
+const LABEL_FULL_DISTANCE = 18;
+const LABEL_SHORT_DISTANCE = 34;
 
 type MeshEffect = 'default' | 'selected' | 'hovered';
 type PickableObject = THREE.Object3D;
@@ -35,6 +37,12 @@ interface ResourceUserData {
   resourceType?: string;
   isScaled?: boolean;
   isLabel?: boolean;
+  labels?: {
+    shortName: THREE.Object3D;
+    fullName: THREE.Object3D;
+    dataIn?: THREE.Object3D;
+    dataOut?: THREE.Object3D;
+  };
   originalScale?: THREE.Vector3;
   baseColor?: number;
   baseEmissive?: THREE.Color;
@@ -692,7 +700,52 @@ export class ClusterRenderer {
       if (animate) {
         animate(time, delta);
       }
+      this._updateLabelDetail(group);
     }
+  }
+
+  _updateLabelDetail(group: THREE.Group): void {
+    const labels = (group.userData as ResourceUserData).labels;
+    if (!labels) return;
+
+    const zoomDistance = this.camera.position.distanceTo(this.controls.target);
+    const nodeDistance = this.camera.position.distanceTo(group.position);
+    const showFull = zoomDistance <= LABEL_FULL_DISTANCE;
+    const showShort = !showFull && zoomDistance <= LABEL_SHORT_DISTANCE;
+
+    labels.fullName.visible = showFull;
+    labels.shortName.visible = showShort;
+    if (labels.dataIn) labels.dataIn.visible = showFull;
+    if (labels.dataOut) labels.dataOut.visible = showFull;
+
+    if (showFull) {
+      const factor = THREE.MathUtils.clamp(nodeDistance / 8, 1.35, 2.4);
+      this._setLabelScale(labels.fullName, factor);
+      if (labels.dataIn) this._setLabelScale(labels.dataIn, Math.max(1.15, factor * 0.92));
+      if (labels.dataOut) this._setLabelScale(labels.dataOut, Math.max(1.15, factor * 0.92));
+      this._setLabelScale(labels.shortName, 1);
+      return;
+    }
+
+    if (showShort) {
+      const factor = THREE.MathUtils.clamp(nodeDistance / 10, 1.25, 2.1);
+      this._setLabelScale(labels.shortName, factor);
+      this._setLabelScale(labels.fullName, 1);
+      if (labels.dataIn) this._setLabelScale(labels.dataIn, 1);
+      if (labels.dataOut) this._setLabelScale(labels.dataOut, 1);
+      return;
+    }
+
+    this._setLabelScale(labels.shortName, 1);
+    this._setLabelScale(labels.fullName, 1);
+    if (labels.dataIn) this._setLabelScale(labels.dataIn, 1);
+    if (labels.dataOut) this._setLabelScale(labels.dataOut, 1);
+  }
+
+  _setLabelScale(object: THREE.Object3D, factor: number): void {
+    const originalScale = (object.userData as ResourceUserData).originalScale;
+    if (!originalScale) return;
+    object.scale.copy(originalScale).multiplyScalar(factor);
   }
 
   flyTo(targetPosition: THREE.Vector3, cameraPosition: THREE.Vector3, duration = 1000): void {

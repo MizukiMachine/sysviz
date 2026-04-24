@@ -75,11 +75,13 @@ export class ConnectionLineManager {
   scene: THREE.Scene;
   connections: Map<string, ConnectionEntry>;
   lineGroup: THREE.Group;
+  labelTextures: Map<string, THREE.CanvasTexture>;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
     this.connections = new Map();
     this.lineGroup = new THREE.Group();
+    this.labelTextures = new Map();
     this.scene.add(this.lineGroup);
   }
 
@@ -143,16 +145,20 @@ export class ConnectionLineManager {
 
     const arrowHead = this._createArrowHead(relationColor);
     this._updateArrowHead(arrowHead, curve);
+    const labelSprite = this._createLabelSprite(connection._label, midpoint);
 
     this.lineGroup.add(line);
     this.lineGroup.add(arrowHead);
+    if (labelSprite) {
+      this.lineGroup.add(labelSprite);
+    }
 
     this.connections.set(connection.id, {
       line,
       arrowHead,
       connection,
       curve,
-      labelSprite: null,
+      labelSprite,
       sourcePos: sourcePos.clone(),
       targetPos: targetPos.clone(),
       midpoint: midpoint.clone(),
@@ -172,7 +178,6 @@ export class ConnectionLineManager {
 
     if (entry.labelSprite) {
       this.lineGroup.remove(entry.labelSprite);
-      entry.labelSprite.material.map?.dispose();
       entry.labelSprite.material.dispose();
     }
 
@@ -238,9 +243,82 @@ export class ConnectionLineManager {
 
     entry.line.material.opacity = active ? MAX_OPACITY : this._getBaseOpacity(entry.connection);
     entry.arrowHead.material.opacity = active ? 0.98 : ARROW_HEAD_OPACITY;
+    if (entry.labelSprite) {
+      entry.labelSprite.material.opacity = active ? 1 : 0.92;
+    }
     (entry.line.userData as LineUserData).flowSpeed = active
       ? this._getActiveFlowSpeed(entry.connection)
       : this._getBaseFlowSpeed(entry.connection);
+  }
+
+  private _createLabelSprite(text: string | null | undefined, midpoint: THREE.Vector3): THREE.Sprite | null {
+    const texture = this._getLabelTexture(text);
+    if (!texture) return null;
+
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      opacity: 0.92,
+      sizeAttenuation: true,
+    }));
+    sprite.renderOrder = 8;
+    sprite.position.copy(midpoint);
+    sprite.position.y += 0.48;
+    sprite.scale.set(2.8, 0.44, 1);
+    return sprite;
+  }
+
+  private _getLabelTexture(text: string | null | undefined): THREE.CanvasTexture | null {
+    const label = text?.trim() || '';
+    if (!label) return null;
+    if (this.labelTextures.has(label)) {
+      return this.labelTextures.get(label) || null;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 160;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '600 32px "Inter", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const textWidth = Math.min(ctx.measureText(label).width + 44, canvas.width - 16);
+    const boxHeight = 72;
+    const boxX = (canvas.width - textWidth) / 2;
+    const boxY = (canvas.height - boxHeight) / 2;
+    const radius = 16;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.beginPath();
+    ctx.moveTo(boxX + radius, boxY);
+    ctx.lineTo(boxX + textWidth - radius, boxY);
+    ctx.quadraticCurveTo(boxX + textWidth, boxY, boxX + textWidth, boxY + radius);
+    ctx.lineTo(boxX + textWidth, boxY + boxHeight - radius);
+    ctx.quadraticCurveTo(boxX + textWidth, boxY + boxHeight, boxX + textWidth - radius, boxY + boxHeight);
+    ctx.lineTo(boxX + radius, boxY + boxHeight);
+    ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
+    ctx.lineTo(boxX, boxY + radius);
+    ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#0f172a';
+    ctx.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 64);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    this.labelTextures.set(label, texture);
+    return texture;
   }
 
   private _createArrowHead(color: number): THREE.Mesh<THREE.ConeGeometry, THREE.MeshBasicMaterial> {
@@ -367,6 +445,10 @@ export class ConnectionLineManager {
     for (const id of [...this.connections.keys()]) {
       this.removeConnection(id);
     }
+    for (const texture of this.labelTextures.values()) {
+      texture.dispose();
+    }
+    this.labelTextures.clear();
     this.scene.remove(this.lineGroup);
   }
 }

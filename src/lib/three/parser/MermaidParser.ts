@@ -1538,7 +1538,7 @@ export class MermaidParser {
           targetId: conn.targetId,
           sourcePos: srcMesh.position.clone(),
           targetPos: tgtMesh.position.clone(),
-          payload: nodeMap.get(conn.sourceId)?.dataOut || '',
+          payload: conn._label || nodeMap.get(conn.sourceId)?.dataOut || '',
           trafficType,
           requestRate: 1.25,
         }];
