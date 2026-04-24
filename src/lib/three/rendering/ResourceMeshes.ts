@@ -34,13 +34,6 @@ interface MeshUserData {
   labelAnchor?: THREE.Vector3;
 }
 
-interface ResourceLabelSet {
-  shortName: THREE.Object3D;
-  fullName: THREE.Object3D;
-  dataIn?: THREE.Object3D;
-  dataOut?: THREE.Object3D;
-}
-
 interface LabelTextureOptions {
   fontSize?: number;
   width?: number;
@@ -54,7 +47,6 @@ interface LabelPlaneOptions extends LabelTextureOptions {
 }
 
 type ResourceGroup = THREE.Group;
-type ResourceCreator = (resource: VisualizationNode) => ResourceGroup;
 
 function shortenLabel(resource: VisualizationNode): string {
   const preferred = (resource.id || '').trim();
@@ -259,82 +251,29 @@ function createEdgeLines(geometry: THREE.BufferGeometry): THREE.LineSegments {
   return new THREE.LineSegments(edgeGeometry, edgeMaterial);
 }
 
-function addResourceElements(
-  group: ResourceGroup,
-  resource: VisualizationNode,
-  _statusColor: number,
-  layout: {
-    nameY: number;
-    nameZ: number;
-    nameScale: { x: number; y: number; z: number };
-    dataInY: number;
-    dataOutY: number;
-    dataZ: number;
-    dataScale: { x: number; y: number; z: number };
-  },
-): void {
-  const shortNameLabel = createLabelSprite(shortenLabel(resource), {
-    fontSize: 38,
-    width: 768,
-    height: 156,
-    scale: { x: layout.nameScale.x * 1.18, y: layout.nameScale.y * 1.15, z: 1 },
-  });
-  (shortNameLabel.userData as MeshUserData).labelVariant = 'short';
-  shortNameLabel.position.set(0, layout.nameY, layout.nameZ);
-  (shortNameLabel.userData as MeshUserData).labelAnchor = shortNameLabel.position.clone();
-  group.add(shortNameLabel);
+function addBoxLabels(group: ResourceGroup, resource: VisualizationNode, width: number, height: number, depth: number): void {
+  const labelText = resource.fullLabel || resource.name || resource.id || 'Node';
 
-  const fullNameLabel = createLabelSprite(resource.name || resource.id || 'Node', {
+  const topLabel = createLabelPlane(labelText, {
     fontSize: 42,
-    width: 1024,
-    height: 192,
-    scale: { x: layout.nameScale.x * 1.42, y: layout.nameScale.y * 1.28, z: 1 },
-  });
-  fullNameLabel.material.map = getLabelTexture(resource.fullLabel || resource.name || resource.id || 'Node', {
-    fontSize: 34,
     width: 1200,
     height: 256,
     maxTextWidth: 1120,
+    scale: { x: width * 0.92, y: depth * 0.74, z: 1 },
   });
-  (fullNameLabel.userData as MeshUserData).labelVariant = 'full';
-  fullNameLabel.position.set(0, layout.nameY, layout.nameZ);
-  (fullNameLabel.userData as MeshUserData).labelAnchor = fullNameLabel.position.clone();
-  group.add(fullNameLabel);
+  topLabel.rotation.x = -Math.PI / 2;
+  topLabel.position.set(0, height / 2 + 0.04, 0);
+  group.add(topLabel);
 
-  const labels: ResourceLabelSet = {
-    shortName: shortNameLabel,
-    fullName: fullNameLabel,
-  };
-
-  if (resource.dataIn) {
-    const dataInLabel = createLabelSprite(`IN: ${resource.dataIn}`, {
-      fontSize: 20,
-      width: 1024,
-      height: 128,
-      scale: { x: layout.dataScale.x * 1.22, y: layout.dataScale.y * 1.18, z: 1 },
-    });
-    (dataInLabel.userData as MeshUserData).labelVariant = 'data';
-    dataInLabel.position.set(0, layout.dataInY, layout.dataZ);
-    (dataInLabel.userData as MeshUserData).labelAnchor = dataInLabel.position.clone();
-    group.add(dataInLabel);
-    labels.dataIn = dataInLabel;
-  }
-
-  if (resource.dataOut) {
-    const dataOutLabel = createLabelSprite(`OUT: ${resource.dataOut}`, {
-      fontSize: 20,
-      width: 1024,
-      height: 128,
-      scale: { x: layout.dataScale.x * 1.22, y: layout.dataScale.y * 1.18, z: 1 },
-    });
-    (dataOutLabel.userData as MeshUserData).labelVariant = 'data';
-    dataOutLabel.position.set(0, layout.dataOutY, layout.dataZ);
-    (dataOutLabel.userData as MeshUserData).labelAnchor = dataOutLabel.position.clone();
-    group.add(dataOutLabel);
-    labels.dataOut = dataOutLabel;
-  }
-
-  group.userData.labels = labels;
+  const frontLabel = createLabelPlane(labelText, {
+    fontSize: 38,
+    width: 1200,
+    height: 320,
+    maxTextWidth: 1120,
+    scale: { x: width * 0.92, y: height * 0.8, z: 1 },
+  });
+  frontLabel.position.set(0, 0, depth / 2 + 0.04);
+  group.add(frontLabel);
 
   const idleY = resource.y || 0;
   const userData = group.userData as MeshUserData;
@@ -344,139 +283,27 @@ function addResourceElements(
   });
 }
 
-function createDefaultResource(resource: VisualizationNode): ResourceGroup {
+function createBoxResource(resource: VisualizationNode): ResourceGroup {
   const group = new THREE.Group();
   const statusColor = getStatusColor(resource.status);
   const nodeColor = resource.color || BASE_COLOR;
+  const width = resource.renderWidth ?? 2.8;
+  const height = resource.renderHeight ?? 1.3;
+  const depth = resource.renderDepth ?? 0.85;
 
-  const geometry = roundedBoxGeometry(2.8, 1.3, 0.6, 0.18);
+  const geometry = roundedBoxGeometry(width, height, depth, 0.18);
   geometry.center();
   const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
   group.add(body);
   group.add(createEdgeLines(geometry));
-
-  addResourceElements(group, resource, statusColor, {
-    nameY: 0.2,
-    nameZ: 0.08,
-    nameScale: { x: 2.7, y: 0.72, z: 1 },
-    dataInY: -0.08,
-    dataOutY: -0.42,
-    dataZ: 0.1,
-    dataScale: { x: 3.0, y: 0.4, z: 1 },
-  });
+  addBoxLabels(group, resource, width, height, depth);
   return group;
 }
-
-function createSphereResource(resource: VisualizationNode): ResourceGroup {
-  const group = new THREE.Group();
-  const statusColor = getStatusColor(resource.status);
-  const nodeColor = resource.color || BASE_COLOR;
-
-  const geometry = new THREE.IcosahedronGeometry(1.0, 2);
-  const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
-  group.add(body);
-  group.add(createEdgeLines(geometry));
-
-  addResourceElements(group, resource, statusColor, {
-    nameY: 0.16,
-    nameZ: 0.12,
-    nameScale: { x: 2.0, y: 0.56, z: 1 },
-    dataInY: -0.14,
-    dataOutY: -0.46,
-    dataZ: 0.14,
-    dataScale: { x: 2.25, y: 0.34, z: 1 },
-  });
-  return group;
-}
-
-function createCylinderResource(resource: VisualizationNode): ResourceGroup {
-  const group = new THREE.Group();
-  const statusColor = getStatusColor(resource.status);
-  const nodeColor = resource.color || BASE_COLOR;
-
-  const geometry = new THREE.CylinderGeometry(0.9, 0.9, 1.4, 32);
-  const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
-  group.add(body);
-  group.add(createEdgeLines(geometry));
-
-  addResourceElements(group, resource, statusColor, {
-    nameY: 0.22,
-    nameZ: 0.12,
-    nameScale: { x: 2.15, y: 0.56, z: 1 },
-    dataInY: -0.06,
-    dataOutY: -0.4,
-    dataZ: 0.14,
-    dataScale: { x: 2.5, y: 0.34, z: 1 },
-  });
-  return group;
-}
-
-function createDiamondResource(resource: VisualizationNode): ResourceGroup {
-  const group = new THREE.Group();
-  const statusColor = getStatusColor(resource.status);
-  const nodeColor = resource.color || BASE_COLOR;
-
-  const geometry = new THREE.OctahedronGeometry(1.0, 0);
-  const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
-  group.add(body);
-  group.add(createEdgeLines(geometry));
-
-  addResourceElements(group, resource, statusColor, {
-    nameY: 0.18,
-    nameZ: 0.12,
-    nameScale: { x: 2.0, y: 0.56, z: 1 },
-    dataInY: -0.14,
-    dataOutY: -0.46,
-    dataZ: 0.14,
-    dataScale: { x: 2.2, y: 0.34, z: 1 },
-  });
-  return group;
-}
-
-function createTorusResource(resource: VisualizationNode): ResourceGroup {
-  const group = new THREE.Group();
-  const statusColor = getStatusColor(resource.status);
-  const nodeColor = resource.color || BASE_COLOR;
-
-  const geometry = new THREE.TorusGeometry(0.7, 0.3, 16, 48);
-  const body = new THREE.Mesh(geometry, createBodyMaterial(nodeColor, statusColor));
-  group.add(body);
-  group.add(createEdgeLines(geometry));
-
-  addResourceElements(group, resource, statusColor, {
-    nameY: 0.16,
-    nameZ: 0.12,
-    nameScale: { x: 2.05, y: 0.56, z: 1 },
-    dataInY: -0.12,
-    dataOutY: -0.42,
-    dataZ: 0.14,
-    dataScale: { x: 2.25, y: 0.34, z: 1 },
-  });
-  return group;
-}
-
-const CREATORS: Record<string, ResourceCreator> = {
-  default: createDefaultResource,
-  sphere: createSphereResource,
-  cylinder: createCylinderResource,
-  diamond: createDiamondResource,
-  torus: createTorusResource,
-};
-
-const HALF_HEIGHTS: Record<string, number> = {
-  default: 0.65,
-  sphere: 1.0,
-  cylinder: 0.7,
-  diamond: 1.0,
-  torus: 1.0,
-};
 
 export class ResourceMeshFactory {
   create(resource: VisualizationNode): ResourceGroup {
-    const shape = resource.shape || 'default';
-    const creator = CREATORS[shape] || CREATORS.default;
-    const group = creator(resource);
-    (group.userData as MeshUserData).halfHeight = HALF_HEIGHTS[shape] || HALF_HEIGHTS.default;
+    const group = createBoxResource(resource);
+    (group.userData as MeshUserData).halfHeight = (resource.renderHeight ?? 1.3) / 2;
     return group;
   }
 

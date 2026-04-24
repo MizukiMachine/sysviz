@@ -2,6 +2,8 @@ import type { ViewConfig } from '@/types/visualization';
 
 const PHASE_DESCRIPTIONS: Record<string, string> = {
   'mermaid-data-flow': `この可視化は、Mermaid flowchart（.mmdファイル）から自動生成されたデータフロー図です。`,
+  'mermaid-fastapi-data-flow': `この可視化は、FastAPI の OpenAPI 生成とランタイム検証の流れを Mermaid flowchart から自動生成した図です。`,
+  'mermaid-fastapi-sequence-request': `この可視化は、FastAPI のリクエスト処理ライフサイクルを Mermaid sequenceDiagram から自動生成した図です。`,
 };
 
 export function getPhaseDescriptions(viewName: string): string {

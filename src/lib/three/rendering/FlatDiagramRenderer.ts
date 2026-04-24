@@ -7,7 +7,8 @@ const MAX_TEXTURE_HEIGHT = 4096;
 
 interface FlatDiagramEntry {
   group: THREE.Group;
-  texture: THREE.CanvasTexture;
+  texture: THREE.Texture;
+  objectUrl: string | null;
 }
 
 export class FlatDiagramRenderer {
@@ -59,7 +60,7 @@ export class FlatDiagramRenderer {
     const group = new THREE.Group();
     group.add(plane);
     this.group.add(group);
-    this.current = { group, texture };
+    this.current = { group, texture, objectUrl: texture.userData.objectUrl ?? null };
   }
 
   clear(): void {
@@ -85,48 +86,34 @@ export class FlatDiagramRenderer {
       }
     });
     this.current.texture.dispose();
+    if (this.current.objectUrl) {
+      URL.revokeObjectURL(this.current.objectUrl);
+    }
     this.current = null;
   }
 
-  private async _createTexture(svg: string, width: number, height: number): Promise<THREE.CanvasTexture> {
-    const scale = Math.min(
-      2,
-      MAX_TEXTURE_WIDTH / Math.max(width, 1),
-      MAX_TEXTURE_HEIGHT / Math.max(height, 1),
-    );
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(width * scale));
-    canvas.height = Math.max(1, Math.round(height * scale));
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      throw new Error('FlatDiagramRenderer: failed to create 2D canvas context');
-    }
-
+  private async _createTexture(svg: string, width: number, height: number): Promise<THREE.Texture> {
     const encoded = new XMLSerializer().serializeToString(
       new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement,
     );
     const blob = new Blob([encoded], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
 
-    try {
-      const image = await this._loadImage(url);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
+    const image = await this._loadImage(url);
+    const texture = new THREE.Texture(image);
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    texture.userData = { sourceWidth: width, sourceHeight: height, objectUrl: url };
     return texture;
   }
 
   private _loadImage(url: string): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
       const image = new Image();
+      image.crossOrigin = 'anonymous';
       image.decoding = 'async';
       image.onload = () => resolve(image);
       image.onerror = () => reject(new Error('FlatDiagramRenderer: failed to decode SVG image'));

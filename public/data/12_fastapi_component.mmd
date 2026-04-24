@@ -1,0 +1,116 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#7FB3D0',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
+flowchart TB
+    subgraph PublicAPI["Public API (fastapi/__init__.py) / Public API"]
+        direction LR
+        FastAPIClass["FastAPI"]
+        APIRouterClass["APIRouter"]
+        DependsFunc["Depends()"]
+        SecurityFunc["Security()"]
+        ParamFuncs["Query / Path / Header / Cookie / Body / Form / File"]
+        ResponseClasses["Response / JSONResponse"]
+        ExceptionClasses["HTTPException"]
+        BackgroundTasksClass["BackgroundTasks"]
+    end
+
+    subgraph ApplicationCore["applications.py / Application Core"]
+        direction LR
+        FastAPIApp["class FastAPI(Starlette)<br/>Main application class"]
+        Lifespan["Lifespan management<br/>startup / shutdown"]
+        OpenAPISetup["OpenAPI schema setup<br/>title / description / version"]
+        RouteReg["Route registration<br/>get / post / put / delete etc."]
+    end
+
+    subgraph RoutingCore["routing.py / Routing Core"]
+        direction LR
+        APIRouterImpl["class APIRouter<br/>Route grouping & prefix"]
+        RouteClass["class APIRoute<br/>Single route definition"]
+        RequestResponse["request_response()<br/>ASGI wrapper with exit stacks"]
+        WebSocketSession["websocket_session()<br/>WebSocket ASGI wrapper"]
+        LifespanMerge["_merge_lifespan_context()<br/>Combine lifespan contexts"]
+    end
+
+    subgraph DependencySystem["dependencies/ / Dependency Injection System"]
+        direction LR
+        DependantModel["Dependant<br/>Dependency tree model"]
+        SolveDeps["solve_dependencies()<br/>Resolve dependency chain"]
+        GetDependant["get_dependant()<br/>Analyze function signatures"]
+        FlatDependant["get_flat_dependant()<br/>Flatten nested deps"]
+        CacheKey["cache_key<br/>Dependency caching"]
+        ScopeMgmt["scope: function / request<br/>Yield dependency lifecycle"]
+    end
+
+    subgraph SecurityCore["security/ / Security System"]
+        direction LR
+        SecurityBase["SecurityBase<br/>Base class for all schemes"]
+        HTTPBasic["HTTPBasic<br/>Basic authentication"]
+        HTTPBearer["HTTPBearer<br/>Bearer token auth"]
+        APIKey["APIKey<br/>Header / Query / Cookie"]
+        OAuth2["OAuth2<br/>OAuth2 flows"]
+        OIDC["OpenIdConnect<br/>OIDC discovery"]
+    end
+
+    subgraph OpenAPICore["openapi/ / OpenAPI Generation"]
+        direction LR
+        GetOpenAPI["get_openapi()<br/>Generate OpenAPI schema"]
+        SchemaModels["openapi/models.py<br/>OpenAPI model classes"]
+        PathOps["Path operation schema<br/>Extract from routes"]
+        ValidationSchema["Validation schema<br/>From Pydantic models"]
+        DocsHTML["get_swagger_ui_html()<br/>get_redoc_html()"]
+    end
+
+    subgraph ParamSystem["params.py + param_functions.py / Parameter System"]
+        direction LR
+        Param["class Param(FieldInfo)<br/>Base parameter class"]
+        QueryParam["Query<br/>URL query parameters"]
+        PathParam["Path<br/>URL path parameters"]
+        HeaderParam["Header<br/>HTTP headers"]
+        CookieParam["Cookie<br/>HTTP cookies"]
+        BodyParam["Body<br/>Request body"]
+        FormParam["Form / File<br/>Form data & uploads"]
+    end
+
+    subgraph MiddlewareCore["middleware/ / Middleware"]
+        direction LR
+        AsyncExitStack["AsyncExitStackMiddleware<br/>Dependency cleanup"]
+        CORSMiddleware["CORSMiddleware<br/>Cross-origin support"]
+        GzipMiddleware["GzipMiddleware<br/>Response compression"]
+        HTTPSRedirect["HTTPSRedirectMiddleware<br/>Force HTTPS"]
+        TrustedHost["TrustedHostMiddleware<br/>Host filtering"]
+    end
+
+    subgraph CompatLayer["_compat/ + utils.py / Compatibility & Utilities"]
+        direction LR
+        PydanticCompat["Pydantic v2 compatibility<br/>ModelField / field handling"]
+        JSONEncoder["jsonable_encoder()<br/>JSON serialization"]
+        CreateModelField["create_model_field()<br/>Field creation helpers"]
+        ValidateField["Validation helpers<br/>is_scalar / lenient_issubclass"]
+    end
+
+    PublicAPI --> ApplicationCore
+    PublicAPI --> RoutingCore
+    PublicAPI --> DependencySystem
+    PublicAPI --> SecurityCore
+    ApplicationCore --> RoutingCore
+    ApplicationCore --> OpenAPICore
+    ApplicationCore --> MiddlewareCore
+    RoutingCore --> DependencySystem
+    DependencySystem --> SecurityCore
+    DependencySystem --> ParamSystem
+    DependencySystem --> CompatLayer
+    OpenAPICore --> ParamSystem
+    OpenAPICore --> CompatLayer
+
+    style PublicAPI fill:#5D6D7E,stroke:#4A4D60,color:#fff
+    style ApplicationCore fill:#AED6F1,stroke:#5DADE2,color:#333
+    style RoutingCore fill:#FAD7A0,stroke:#F5B041,color:#333
+    style DependencySystem fill:#A9DFBF,stroke:#52BE80,color:#333
+    style SecurityCore fill:#F5B7B1,stroke:#D98880,color:#333
+    style OpenAPICore fill:#F9E79F,stroke:#F4D03F,color:#333
+    style ParamSystem fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style MiddlewareCore fill:#A3E4D7,stroke:#48C9B0,color:#333
+    style CompatLayer fill:#D5D8DC,stroke:#ABB2B9,color:#333

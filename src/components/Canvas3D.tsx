@@ -129,33 +129,31 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
 
       if (view.flatDiagram) {
         void flat.render(view.flatDiagram);
-        sequenceParticipants.render(view.sequenceParticipants);
-        if (view.camera) {
-          renderer.applyCamera(view.camera);
-        } else {
-          renderer.frameBounds(view.flatDiagram.bounds);
-        }
-        return;
       }
+      sequenceParticipants.render(view.sequenceParticipants);
 
       // Load new data
       for (const node of view.nodes) {
         renderer.addResource(node);
       }
-      for (const conn of view.connections) {
-        renderer.addConnection(conn, view.clusterBounds);
-      }
-      const routes = view.buildRoutes(renderer.resourceMeshes);
-      for (const route of routes) {
-        renderer.addTrafficRoute(route);
+      if (!view.flatDiagram) {
+        for (const conn of view.connections) {
+          renderer.addConnection(conn, view.clusterBounds);
+        }
+        const routes = view.buildRoutes(renderer.resourceMeshes);
+        for (const route of routes) {
+          renderer.addTrafficRoute(route);
+        }
       }
 
-      if (view.subgraphs.size > 0) {
+      if (!view.flatDiagram && view.subgraphs.size > 0) {
         sg.render(view.subgraphs, view.nodeSubgraphs, renderer.resourceMeshes, view.clusterBounds);
       }
 
       if (view.camera) {
         renderer.applyCamera(view.camera);
+      } else if (view.flatDiagram) {
+        renderer.frameBounds(view.flatDiagram.bounds);
       } else {
         renderer.frameResources(view.clusterBounds);
       }

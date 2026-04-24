@@ -268,7 +268,10 @@ export class MermaidParser {
     const layers = this._extractLayers(nodes, tokens.direction);
     this._applyColors(nodes, tokens.styles);
     this._applyDataLabels(nodes, connections);
-    const camera = this._calculateCamera(nodes);
+    const rendered = await this._renderSvg(mmdText);
+    this._removeFlowchartNodeGroups(rendered.svgDoc);
+    const flatDiagram = this._buildFlatDiagram(rendered.svgDoc, rendered.svg);
+    const camera = this._calculateFlatDiagramCamera(flatDiagram.bounds, 'flowchart');
     const timeline = this._generateTimeline(nodes, connections, layers, tokens.subgraphs, tokens.nodeSubgraphs);
     const buildRoutes = this._createBuildRoutes(nodes, connections);
 
@@ -282,6 +285,7 @@ export class MermaidParser {
       nodeSubgraphs: tokens.nodeSubgraphs,
       rawMmdText: mmdText,
       clusterBounds,
+      flatDiagram,
       diagramType: 'flowchart',
     };
   }
@@ -579,7 +583,7 @@ export class MermaidParser {
     const rendered = await this._renderSvg(mmdText);
     const sequenceParticipants = this._extractSequenceParticipants(rendered.svgDoc);
     const flatDiagram = this._buildFlatDiagram(rendered.svgDoc, rendered.svg);
-    const camera = this._calculateSequenceCamera(flatDiagram.bounds);
+    const camera = this._calculateFlatDiagramCamera(flatDiagram.bounds, 'sequence');
     const timeline = this._generateTimeline(nodes, connections, [], tokens.subgraphs, tokens.nodeSubgraphs);
     const buildRoutes = this._createBuildRoutes(nodes, connections);
 
@@ -661,6 +665,9 @@ export class MermaidParser {
         x: 0,
         y: 0,
         z: 0,
+        renderWidth: undefined,
+        renderHeight: undefined,
+        renderDepth: undefined,
         dataIn: undefined,
         dataOut: undefined,
         floatOffset: i * 0.5,
@@ -823,7 +830,7 @@ export class MermaidParser {
 
       const worldWidth = Math.max(1.8, bounds.width * scale);
       const worldHeight = Math.max(0.8, bounds.height * scale);
-      const worldDepth = Math.max(0.7, Math.min(worldHeight * 1.2, 1.6));
+      const worldDepth = Math.max(worldHeight, Math.min(worldWidth * 0.92, worldHeight * 1.15));
 
       participants.push({
         id,
@@ -845,15 +852,29 @@ export class MermaidParser {
     return participants;
   }
 
-  private _calculateSequenceCamera(bounds: ClusterBounds): VisualizationCamera {
+  private _calculateFlatDiagramCamera(bounds: ClusterBounds, diagramType: 'flowchart' | 'sequence'): VisualizationCamera {
     const width = bounds.maxX - bounds.minX;
     const depth = bounds.maxZ - bounds.minZ;
     const maxSpan = Math.max(width, depth, 24);
+
+    if (diagramType === 'flowchart') {
+      return {
+        position: [0, Math.max(18, maxSpan * 0.82), Math.max(10, maxSpan * 0.42)],
+        target: [0, 0, 0],
+      };
+    }
 
     return {
       position: [0, Math.max(26, maxSpan * 1.18), 0.01],
       target: [0, 0, 0],
     };
+  }
+
+  private _removeFlowchartNodeGroups(svgDoc: Document): void {
+    const nodeGroups = [...svgDoc.querySelectorAll<SVGGElement>('g.node')];
+    for (const group of nodeGroups) {
+      group.remove();
+    }
   }
 
   /**
@@ -1206,6 +1227,16 @@ export class MermaidParser {
         node.x = (raw.x - rawCX) * scale;
         node.z = (raw.z - rawCZ) * scale;
         node.y = 0;
+        const svgPos = nodeLookup.get(node.id);
+        if (svgPos?.width && svgPos.width > 0) {
+          node.renderWidth = Math.max(1.8, svgPos.width * scale);
+        }
+        if (svgPos?.height && svgPos.height > 0) {
+          node.renderHeight = Math.max(0.8, svgPos.height * scale);
+        }
+        const renderWidth = node.renderWidth ?? 2.8;
+        const renderHeight = node.renderHeight ?? 1.3;
+        node.renderDepth = Math.max(renderHeight, Math.min(renderWidth * 0.92, renderHeight * 1.15));
       }
     }
 

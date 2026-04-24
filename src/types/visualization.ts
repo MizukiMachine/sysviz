@@ -25,6 +25,9 @@ export interface VisualizationNode {
   x: number;
   y: number;
   z: number;
+  renderWidth?: number;
+  renderHeight?: number;
+  renderDepth?: number;
   dataIn?: string;
   dataOut?: string;
   floatOffset: number;

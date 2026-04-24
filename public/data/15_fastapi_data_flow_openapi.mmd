@@ -1,0 +1,118 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#7FB3D0',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
+flowchart LR
+    subgraph Source["Source Definitions / Source Definitions"]
+        direction TB
+        RouteDefs["Route decorators<br/>@app.get() @app.post() etc."]
+        TypeHints["Python type hints<br/>str, int, list[Item] etc."]
+        PydanticModels["Pydantic BaseModel<br/>response_model, Request body"]
+        ParamFuncs["Parameter functions<br/>Query, Path, Body, Form, File"]
+        SecurityDefs["Security dependencies<br/>OAuth2, APIKey, HTTPBasic"]
+        Docstrings["Function docstrings<br/>Endpoint descriptions"]
+    end
+
+    subgraph Extraction["Schema Extraction / Schema Extraction (openapi/utils.py)"]
+        direction TB
+        PathAnalysis["Analyze path operations<br/>Extract routes from APIRouter"]
+        ParamAnalysis["Analyze parameters<br/>Extract path/query/body params"]
+        BodyAnalysis["Analyze request body<br/>Pydantic model -> JSON Schema"]
+        ResponseAnalysis["Analyze response model<br/>return type -> JSON Schema"]
+        SecurityAnalysis["Analyze security schemes<br/>OAuth2 flows, API keys"]
+        ExampleExtraction["Extract examples<br/>From param definitions"]
+    end
+
+    subgraph Generation["OpenAPI Schema Generation / OpenAPI Schema Generation"]
+        direction TB
+        BuildPaths["Build /paths object<br/>Each route -> OpenAPI operation"]
+        BuildComponents["Build /components/schemas<br/>Pydantic models -> JSON Schema"]
+        BuildSecurity["Build /components/securitySchemes<br/>Security scheme definitions"]
+        BuildInfo["Build /info object<br/>title, description, version"]
+        Assemble["Assemble full OpenAPI 3.1<br/>Combine all sections"]
+    end
+
+    subgraph Output["Output / Output"]
+        direction TB
+        JSONSchema["JSON Schema 2020-12<br/>Validation schemas"]
+        OpenAPI31["OpenAPI 3.1.0 spec<br/>Full API specification"]
+        SwaggerUI["Swagger UI (/docs)<br/>Interactive API docs"]
+        ReDoc["ReDoc (/redoc)<br/>Alternative API docs"]
+    end
+
+    subgraph RuntimeFlow["Runtime Validation / Runtime Validation"]
+        direction TB
+        RequestIn["Incoming request"]
+        ValidateRequest["Pydantic validates<br/>body/params against schema"]
+        Endpoint["Endpoint processes<br/>validated data"]
+        ValidateResponse["Pydantic serializes<br/>response to JSON"]
+        ResponseOut["JSON response"]
+    end
+
+    Source -->|"introspection at<br/>app startup"| Extraction
+    Extraction -->|"structured data"| Generation
+    Generation -->|"JSON output"| Output
+    Generation -.->|"validation schemas<br/>used at runtime"| RuntimeFlow
+
+    RouteDefs --> PathAnalysis
+    TypeHints --> ParamAnalysis
+    PydanticModels --> BodyAnalysis
+    PydanticModels --> ResponseAnalysis
+    ParamFuncs --> ParamAnalysis
+    SecurityDefs --> SecurityAnalysis
+
+    PathAnalysis --> BuildPaths
+    ParamAnalysis --> BuildPaths
+    BodyAnalysis --> BuildComponents
+    ResponseAnalysis --> BuildComponents
+    SecurityAnalysis --> BuildSecurity
+    Docstrings --> BuildPaths
+
+    BuildPaths --> Assemble
+    BuildComponents --> Assemble
+    BuildSecurity --> Assemble
+    BuildInfo --> Assemble
+
+    Assemble --> JSONSchema
+    Assemble --> OpenAPI31
+    OpenAPI31 --> SwaggerUI
+    OpenAPI31 --> ReDoc
+
+    RequestIn --> ValidateRequest
+    ValidateRequest --> Endpoint
+    Endpoint --> ValidateResponse
+    ValidateResponse --> ResponseOut
+
+    style Source fill:#F5B7B1,stroke:#D98880,color:#333
+    style Extraction fill:#A9DFBF,stroke:#52BE80,color:#333
+    style Generation fill:#FAD7A0,stroke:#F5B041,color:#333
+    style Output fill:#AED6F1,stroke:#5DADE2,color:#333
+    style RuntimeFlow fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style RouteDefs fill:#F5B7B1,stroke:#D98880,color:#333
+    style TypeHints fill:#F5B7B1,stroke:#D98880,color:#333
+    style PydanticModels fill:#F5B7B1,stroke:#D98880,color:#333
+    style ParamFuncs fill:#F5B7B1,stroke:#D98880,color:#333
+    style SecurityDefs fill:#F5B7B1,stroke:#D98880,color:#333
+    style Docstrings fill:#F5B7B1,stroke:#D98880,color:#333
+    style PathAnalysis fill:#A9DFBF,stroke:#52BE80,color:#333
+    style ParamAnalysis fill:#A9DFBF,stroke:#52BE80,color:#333
+    style BodyAnalysis fill:#A9DFBF,stroke:#52BE80,color:#333
+    style ResponseAnalysis fill:#A9DFBF,stroke:#52BE80,color:#333
+    style SecurityAnalysis fill:#A9DFBF,stroke:#52BE80,color:#333
+    style ExampleExtraction fill:#A9DFBF,stroke:#52BE80,color:#333
+    style BuildPaths fill:#FAD7A0,stroke:#F5B041,color:#333
+    style BuildComponents fill:#FAD7A0,stroke:#F5B041,color:#333
+    style BuildSecurity fill:#FAD7A0,stroke:#F5B041,color:#333
+    style BuildInfo fill:#FAD7A0,stroke:#F5B041,color:#333
+    style Assemble fill:#FAD7A0,stroke:#F5B041,color:#333
+    style JSONSchema fill:#AED6F1,stroke:#5DADE2,color:#333
+    style OpenAPI31 fill:#AED6F1,stroke:#5DADE2,color:#333
+    style SwaggerUI fill:#AED6F1,stroke:#5DADE2,color:#333
+    style ReDoc fill:#AED6F1,stroke:#5DADE2,color:#333
+    style RequestIn fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style ValidateRequest fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style Endpoint fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style ValidateResponse fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style ResponseOut fill:#D7BDE2,stroke:#C39BD3,color:#333

@@ -1,0 +1,75 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#7FB3D0',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
+flowchart TB
+    Client["[Client] HTTP Client<br/>Browser / API Client / curl"]
+
+    subgraph ASGILayer["ASGI Server Layer / ASGI Server Layer"]
+        direction LR
+        Uvicorn["Uvicorn<br/>ASGI Server"]
+        Hypercorn["Hypercorn<br/>ASGI Server"]
+    end
+
+    subgraph StarletteLayer["Starlette Foundation Layer / Starlette Foundation Layer"]
+        direction LR
+        StarletteApp["[Core] Starlette Application<br/>HTTP/WS handling base"]
+        StarletteRouting["[Router] Starlette Routing<br/>URL pattern matching"]
+        StarletteMiddleware["[Middleware] Starlette Middleware<br/>CORS / Errors / Sessions"]
+        StarletteReqResp["[I/O] Request & Response<br/>HTTP request/response objects"]
+    end
+
+    subgraph FastAPILayer["FastAPI Core Layer / FastAPI Core Layer"]
+        direction LR
+        FastAPIApp["[App] FastAPI Class<br/>Main application entry"]
+        Router["[Router] APIRouter<br/>Route registration & grouping"]
+        DependencySystem["[DI] Dependency Injection<br/>Depends / Security"]
+        ParamExtraction["[Params] Parameter Extraction<br/>Path / Query / Header / Cookie / Body"]
+    end
+
+    subgraph ValidationLayer["Validation & Serialization Layer / Validation & Serialization Layer"]
+        direction LR
+        PydanticValidation["[Validator] Pydantic<br/>Request validation & serialization"]
+        OpenAPIGen["[Schema] OpenAPI Generator<br/>Auto-generated API docs"]
+        TypeHints["[Types] Python Type Hints<br/>Type-annotated parameters"]
+    end
+
+    subgraph UserLayer["User Application Layer / User Application Layer"]
+        direction LR
+        Endpoints["[Endpoint] Path Operations<br/>app.get() / app.post() etc."]
+        Models["[Model] Pydantic Models<br/>Request/response schemas"]
+        Deps["[Deps] User Dependencies<br/>DB sessions / Auth / Config"]
+    end
+
+    Client --> ASGILayer
+    ASGILayer --> StarletteLayer
+    StarletteLayer --> FastAPILayer
+    FastAPILayer --> ValidationLayer
+    ValidationLayer --> UserLayer
+    UserLayer -.->|"type annotations"| ValidationLayer
+    UserLayer -.->|"Depends()"| FastAPILayer
+
+    style Client fill:#5D6D7E,stroke:#4A4D60,color:#fff
+    style ASGILayer fill:#AED6F1,stroke:#5DADE2,color:#333
+    style StarletteLayer fill:#D5F5E3,stroke:#82E0AA,color:#333
+    style FastAPILayer fill:#FAD7A0,stroke:#F5B041,color:#333
+    style ValidationLayer fill:#F9E79F,stroke:#F4D03F,color:#333
+    style UserLayer fill:#F5B7B1,stroke:#D98880,color:#333
+    style Uvicorn fill:#AED6F1,stroke:#5DADE2,color:#333
+    style Hypercorn fill:#AED6F1,stroke:#5DADE2,color:#333
+    style StarletteApp fill:#D5F5E3,stroke:#82E0AA,color:#333
+    style StarletteRouting fill:#D5F5E3,stroke:#82E0AA,color:#333
+    style StarletteMiddleware fill:#D5F5E3,stroke:#82E0AA,color:#333
+    style StarletteReqResp fill:#D5F5E3,stroke:#82E0AA,color:#333
+    style FastAPIApp fill:#FAD7A0,stroke:#F5B041,color:#333
+    style Router fill:#FAD7A0,stroke:#F5B041,color:#333
+    style DependencySystem fill:#FAD7A0,stroke:#F5B041,color:#333
+    style ParamExtraction fill:#FAD7A0,stroke:#F5B041,color:#333
+    style PydanticValidation fill:#F9E79F,stroke:#F4D03F,color:#333
+    style OpenAPIGen fill:#F9E79F,stroke:#F4D03F,color:#333
+    style TypeHints fill:#F9E79F,stroke:#F4D03F,color:#333
+    style Endpoints fill:#F5B7B1,stroke:#D98880,color:#333
+    style Models fill:#F5B7B1,stroke:#D98880,color:#333
+    style Deps fill:#F5B7B1,stroke:#D98880,color:#333

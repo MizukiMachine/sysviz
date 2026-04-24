@@ -1,0 +1,107 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#7FB3D0',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
+flowchart TB
+    subgraph UserDef["User-defined Dependencies / User-defined Dependencies"]
+        direction TB
+        subgraph DepFunctions["Dependency Functions"]
+            GetDB["get_db()<br/>DB session provider"]
+            GetCurrentUser["get_current_user()<br/>User authentication"]
+            GetItem["get_item(item_id)<br/>Fetch item by ID"]
+            VerifyPermission["verify_permission(user, item)<br/>Authorization check"]
+        end
+        subgraph ClassDeps["Class-based Dependencies"]
+            Repo["class ItemRepository<br/>Database operations"]
+            Service["class ItemService<br/>Business logic"]
+        end
+    end
+
+    subgraph DeclaredIn["Declaration in Endpoint / Endpoint Declaration"]
+        direction TB
+        EndpointFunc["@app.get('/items/{item_id}')<br/>async def read_item("]
+        Deps1["  db: Annotated[Session, Depends(get_db)],"]
+        Deps2["  user: Annotated[User, Depends(get_current_user)],"]
+        Deps3["  item: Annotated[Item, Depends(get_item)],"]
+        Deps4["  _: Annotated[None, Depends(verify_permission)],"]
+        EndFunc[")"]
+    end
+
+    subgraph Introspection["Dependency Introspection / Type Introspection (dependencies/utils.py)"]
+        direction TB
+        GetDep["get_dependant()<br/>Analyze function signature<br/>Extract all Depends() params"]
+        BuildTree["Build dependency tree<br/>Dependant with nested dependencies"]
+        FlatTree["get_flat_dependant()<br/>Flatten tree for resolution"]
+        CacheCheck["Check cache_key<br/>Reuse if same scope & call"]
+    end
+
+    subgraph Resolution["Dependency Resolution / solve_dependencies()"]
+        direction TB
+        StartStack["Start AsyncExitStack"]
+        ExtractParams["Extract request values<br/>Path / Query / Header / Cookie"]
+        Validate["Pydantic validation<br/>for each parameter"]
+        CallDeps["Call dependency functions<br/>in tree order"]
+        HandleYield["Handle yield dependencies<br/>Enter context manager"]
+        Result["Return solved dict<br/>{param_name: value}"]
+    end
+
+    subgraph ScopeControl["Dependency Scope / Scope Control"]
+        direction TB
+        FunctionScope["scope='function'<br/>Cleared after endpoint returns<br/>Before response sent"]
+        RequestScope["scope='request'<br/>Cleared after response sent<br/>Around full request lifecycle"]
+        DefaultScope["Default (no scope)<br/>gen/async-gen -> request scope<br/>normal -> function scope"]
+    end
+
+    subgraph SecurityDeps["Security Dependencies / Security System Integration"]
+        direction TB
+        SecurityFunc["Security(get_current_user)<br/>Same as Depends + scopes"]
+        Scopes["scopes=['read:items']<br/>OAuth2 permission scopes"]
+        SecuritySchemes["HTTPBasic / HTTPBearer / OAuth2<br/>APIKey / OpenIdConnect"]
+        OpenAPIIntegration["Integrated into OpenAPI docs<br/>Security requirements in schema"]
+    end
+
+    DeclaredIn -->|"function signature<br/>introspection"| Introspection
+    UserDef -->|"referenced by<br/>Depends()"| Introspection
+    Introspection -->|"Dependant tree"| Resolution
+    Resolution -->|"inject values"| DeclaredIn
+    Resolution -->|"lifecycle<br/>management"| ScopeControl
+    SecurityDeps -->|"extends<br/>Depends()"| Introspection
+    SecurityDeps -->|"auto-docs"| OpenAPIIntegration
+
+    style UserDef fill:#F5B7B1,stroke:#D98880,color:#333
+    style DeclaredIn fill:#F5B7B1,stroke:#D98880,color:#333
+    style Introspection fill:#A9DFBF,stroke:#52BE80,color:#333
+    style Resolution fill:#FAD7A0,stroke:#F5B041,color:#333
+    style ScopeControl fill:#F9E79F,stroke:#F4D03F,color:#333
+    style SecurityDeps fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style GetDB fill:#F5B7B1,stroke:#D98880,color:#333
+    style GetCurrentUser fill:#F5B7B1,stroke:#D98880,color:#333
+    style GetItem fill:#F5B7B1,stroke:#D98880,color:#333
+    style VerifyPermission fill:#F5B7B1,stroke:#D98880,color:#333
+    style Repo fill:#F5B7B1,stroke:#D98880,color:#333
+    style Service fill:#F5B7B1,stroke:#D98880,color:#333
+    style EndpointFunc fill:#F5B7B1,stroke:#D98880,color:#333
+    style Deps1 fill:#F5B7B1,stroke:#D98880,color:#333
+    style Deps2 fill:#F5B7B1,stroke:#D98880,color:#333
+    style Deps3 fill:#F5B7B1,stroke:#D98880,color:#333
+    style Deps4 fill:#F5B7B1,stroke:#D98880,color:#333
+    style EndFunc fill:#F5B7B1,stroke:#D98880,color:#333
+    style GetDep fill:#A9DFBF,stroke:#52BE80,color:#333
+    style BuildTree fill:#A9DFBF,stroke:#52BE80,color:#333
+    style FlatTree fill:#A9DFBF,stroke:#52BE80,color:#333
+    style CacheCheck fill:#A9DFBF,stroke:#52BE80,color:#333
+    style StartStack fill:#FAD7A0,stroke:#F5B041,color:#333
+    style ExtractParams fill:#FAD7A0,stroke:#F5B041,color:#333
+    style Validate fill:#FAD7A0,stroke:#F5B041,color:#333
+    style CallDeps fill:#FAD7A0,stroke:#F5B041,color:#333
+    style HandleYield fill:#FAD7A0,stroke:#F5B041,color:#333
+    style Result fill:#FAD7A0,stroke:#F5B041,color:#333
+    style FunctionScope fill:#F9E79F,stroke:#F4D03F,color:#333
+    style RequestScope fill:#F9E79F,stroke:#F4D03F,color:#333
+    style DefaultScope fill:#F9E79F,stroke:#F4D03F,color:#333
+    style SecurityFunc fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style Scopes fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style SecuritySchemes fill:#D7BDE2,stroke:#C39BD3,color:#333
+    style OpenAPIIntegration fill:#D7BDE2,stroke:#C39BD3,color:#333

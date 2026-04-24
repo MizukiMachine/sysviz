@@ -1,0 +1,61 @@
+%%{init: {'theme': 'base', 'themeVariables': {
+  'primaryColor': '#7FB3D0',
+  'primaryTextColor': '#333',
+  'primaryBorderColor': '#5DADE2',
+  'lineColor': '#85929E'
+}}}%%
+sequenceDiagram
+    participant C as [Client] Client
+    participant U as [Server] Uvicorn
+    participant SM as [Middleware] ServerErrorMiddleware
+    participant EM as [Middleware] ExceptionMiddleware
+    participant CM as [Middleware] CORS / Custom Middleware
+    participant R as [Router] APIRouter
+    participant D as [DI] solve_dependencies()
+    participant V as [Validator] Pydantic
+    participant E as [Endpoint] Path Operation
+
+    C->>U: HTTP Request
+    U->>SM: ASGI scope, receive, send
+    SM->>EM: Pass through error handling
+    EM->>CM: Pass through exception handling
+    CM->>CM: Process middleware (CORS, etc.)
+    CM->>R: Route matching (path + method)
+
+    R->>R: Match APIRoute by URL pattern
+    R->>D: solve_dependencies(route.dependant)
+
+    Note over D: Build dependency tree<br/>from function signature
+
+    D->>D: get_dependant(endpoint)<br/>Extract path/query/header/cookie/body params
+    D->>D: get_flat_dependant()<br/>Flatten nested dependencies
+
+    loop Each dependency in tree
+        D->>D: Check cache (use_cache=True)
+        D->>V: Validate dependency parameters
+        V-->>D: Validated values
+        D->>D: Call dependency function
+        D->>D: Handle yield dependencies<br/>(AsyncExitStack)
+    end
+
+    D->>V: Validate request body with Pydantic
+    V-->>D: Validated body
+    D-->>R: Solved values dict
+
+    R->>E: Call endpoint function<br/>with solved dependencies
+    E->>V: Serialize return value (Pydantic)
+    V-->>E: JSON-serializable response
+
+    alt BackgroundTasks
+        E->>E: Schedule background tasks
+    end
+
+    E-->>R: Response object
+    R-->>CM: Response
+    CM->>CM: Process response middleware
+    CM-->>EM: Response
+    EM-->>SM: Response
+    SM-->>U: Response
+    U-->>C: HTTP Response
+
+    Note over D: Cleanup yield dependencies<br/>(exit AsyncExitStack)
