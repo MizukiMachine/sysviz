@@ -37,6 +37,7 @@ interface ResourceUserData {
   resourceType?: string;
   isScaled?: boolean;
   isLabel?: boolean;
+  labelAnchor?: THREE.Vector3;
   labels?: {
     shortName: THREE.Object3D;
     fullName: THREE.Object3D;
@@ -464,9 +465,10 @@ export class ClusterRenderer {
         emissiveIntensity?: number;
       }) | undefined;
 
+      objectUserData.resourceId = resource.id;
+      objectUserData.originalScale = object.scale.clone();
+
       if (object.isMesh) {
-        objectUserData.resourceId = resource.id;
-        objectUserData.originalScale = object.scale.clone();
         object.castShadow = true;
         object.receiveShadow = true;
         if (material?.emissive) {
@@ -718,6 +720,14 @@ export class ClusterRenderer {
     if (labels.dataIn) labels.dataIn.visible = showFull;
     if (labels.dataOut) labels.dataOut.visible = showFull;
 
+    const toCamera = new THREE.Vector3().subVectors(this.camera.position, group.position);
+    const horizontal = new THREE.Vector3(toCamera.x, 0, toCamera.z).normalize();
+    const forwardOffset = showFull ? 0.9 : showShort ? 0.72 : 0.58;
+    this._setLabelPosition(labels.shortName, horizontal, forwardOffset);
+    this._setLabelPosition(labels.fullName, horizontal, forwardOffset);
+    if (labels.dataIn) this._setLabelPosition(labels.dataIn, horizontal, forwardOffset + 0.04);
+    if (labels.dataOut) this._setLabelPosition(labels.dataOut, horizontal, forwardOffset + 0.04);
+
     if (showFull) {
       const factor = THREE.MathUtils.clamp(nodeDistance / 8, 1.35, 2.4);
       this._setLabelScale(labels.fullName, factor);
@@ -746,6 +756,12 @@ export class ClusterRenderer {
     const originalScale = (object.userData as ResourceUserData).originalScale;
     if (!originalScale) return;
     object.scale.copy(originalScale).multiplyScalar(factor);
+  }
+
+  _setLabelPosition(object: THREE.Object3D, horizontal: THREE.Vector3, forwardOffset: number): void {
+    const anchor = (object.userData as ResourceUserData).labelAnchor;
+    if (!anchor) return;
+    object.position.copy(anchor).addScaledVector(horizontal, forwardOffset);
   }
 
   flyTo(targetPosition: THREE.Vector3, cameraPosition: THREE.Vector3, duration = 1000): void {

@@ -89,6 +89,7 @@ type ConnectionLineStyle = keyof typeof LINE_STYLE_TYPE_MAP;
 interface MermaidNode extends VisualizationNode {
   id: string;
   name: string;
+  fullLabel?: string;
   type: string;
   shape: Node3DShape;
   status: 'idle';
@@ -554,6 +555,7 @@ export class MermaidParser {
       nodes.push({
         id: raw.id,
         name: raw.name,
+        fullLabel: raw.text,
         type,
         shape,
         status: 'idle',

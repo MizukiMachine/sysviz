@@ -17,6 +17,7 @@ export type VisualizationTrafficType = 'healthy' | 'error' | 'slow' | 'default' 
 export interface VisualizationNode {
   id: string;
   name: string;
+  fullLabel?: string;
   type: string;
   shape: VisualizationNodeShape;
   status: VisualizationResourceStatus;
