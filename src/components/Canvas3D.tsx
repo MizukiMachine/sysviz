@@ -1,11 +1,15 @@
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import type { ClusterRenderer } from '@/lib/three/rendering/ClusterRenderer.js';
+import type { FlatDiagramRenderer } from '@/lib/three/rendering/FlatDiagramRenderer.js';
+import type { SequenceParticipantRenderer } from '@/lib/three/rendering/SequenceParticipantRenderer.js';
 import type { SubgraphRenderer } from '@/lib/three/rendering/SubgraphRenderer.js';
 import type { ViewConfig } from '@/types/visualization';
 
 export interface Canvas3DHandle {
   renderer: ClusterRenderer | null;
   subgraphRenderer: SubgraphRenderer | null;
+  flatDiagramRenderer: FlatDiagramRenderer | null;
+  sequenceParticipantRenderer: SequenceParticipantRenderer | null;
   loadView: (view: ViewConfig) => void;
   clearScene: () => void;
 }
@@ -14,6 +18,8 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<ClusterRenderer | null>(null);
   const subgraphRef = useRef<SubgraphRenderer | null>(null);
+  const flatDiagramRef = useRef<FlatDiagramRenderer | null>(null);
+  const sequenceParticipantRef = useRef<SequenceParticipantRenderer | null>(null);
 
   useImperativeHandle(ref, () => ({
     get renderer() {
@@ -21,6 +27,12 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
     },
     get subgraphRenderer() {
       return subgraphRef.current;
+    },
+    get flatDiagramRenderer() {
+      return flatDiagramRef.current;
+    },
+    get sequenceParticipantRenderer() {
+      return sequenceParticipantRef.current;
     },
     loadView,
     clearScene,
@@ -38,21 +50,31 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
 
     void Promise.all([
       import('@/lib/three/rendering/ClusterRenderer.js'),
+      import('@/lib/three/rendering/FlatDiagramRenderer.js'),
+      import('@/lib/three/rendering/SequenceParticipantRenderer.js'),
       import('@/lib/three/rendering/SubgraphRenderer.js'),
-    ]).then(([clusterModule, subgraphModule]) => {
+    ]).then(([clusterModule, flatDiagramModule, sequenceParticipantModule, subgraphModule]) => {
       if (disposed) return;
 
       const renderer = new clusterModule.ClusterRenderer(canvas);
+      const flatDiagramRenderer = new flatDiagramModule.FlatDiagramRenderer(renderer.scene);
+      const sequenceParticipantRenderer = new sequenceParticipantModule.SequenceParticipantRenderer(renderer.scene);
       const subgraphRenderer = new subgraphModule.SubgraphRenderer(renderer.scene);
       rendererRef.current = renderer;
+      flatDiagramRef.current = flatDiagramRenderer;
+      sequenceParticipantRef.current = sequenceParticipantRenderer;
       subgraphRef.current = subgraphRenderer;
 
       renderer.start();
       cleanup = () => {
         renderer.stop();
         renderer.dispose();
+        flatDiagramRenderer.dispose();
+        sequenceParticipantRenderer.dispose();
         subgraphRenderer.dispose();
         rendererRef.current = null;
+        flatDiagramRef.current = null;
+        sequenceParticipantRef.current = null;
         subgraphRef.current = null;
       };
     });
@@ -66,7 +88,9 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
   const clearScene = useCallback(() => {
     const renderer = rendererRef.current;
     const sg = subgraphRef.current;
-    if (!renderer || !sg) return;
+    const flat = flatDiagramRef.current;
+    const sequenceParticipants = sequenceParticipantRef.current;
+    if (!renderer || !sg || !flat || !sequenceParticipants) return;
 
     for (const id of [...renderer.resourceMeshes.keys()]) {
       renderer.removeResource(id);
@@ -79,13 +103,17 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
     }
     renderer.clusterBounds = undefined;
     sg.clear();
+    flat.clear();
+    sequenceParticipants.clear();
   }, []);
 
   const loadView = useCallback(
     (view: ViewConfig) => {
       const renderer = rendererRef.current;
       const sg = subgraphRef.current;
-      if (!renderer || !sg) return;
+      const flat = flatDiagramRef.current;
+      const sequenceParticipants = sequenceParticipantRef.current;
+      if (!renderer || !sg || !flat || !sequenceParticipants) return;
 
       // Reset playback state
       for (const id of [...renderer.resourceMeshes.keys()]) {
@@ -98,6 +126,17 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
       renderer.clearTrafficParticles();
 
       clearScene();
+
+      if (view.flatDiagram) {
+        void flat.render(view.flatDiagram);
+        sequenceParticipants.render(view.sequenceParticipants);
+        if (view.camera) {
+          renderer.applyCamera(view.camera);
+        } else {
+          renderer.frameBounds(view.flatDiagram.bounds);
+        }
+        return;
+      }
 
       // Load new data
       for (const node of view.nodes) {
@@ -115,7 +154,11 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
         sg.render(view.subgraphs, view.nodeSubgraphs, renderer.resourceMeshes, view.clusterBounds);
       }
 
-      renderer.frameResources(view.clusterBounds);
+      if (view.camera) {
+        renderer.applyCamera(view.camera);
+      } else {
+        renderer.frameResources(view.clusterBounds);
+      }
     },
     [clearScene]
   );

@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { ResourceMeshFactory } from './ResourceMeshes.js';
 import { ConnectionLineManager } from './ConnectionLines.js';
 import { ParticleTrafficSystem } from './ParticleTraffic.js';
-import type { ClusterBounds, VisualizationConnection, VisualizationNode, VisualizationRoute, VisualizationResourceStatus } from '@/types/visualization';
+import type { ClusterBounds, VisualizationCamera, VisualizationConnection, VisualizationNode, VisualizationRoute, VisualizationResourceStatus } from '@/types/visualization';
 
 const BACKGROUND_COLOR = 0xfafafa;
 const HIGHLIGHT_COLOR = 0xbfdbfe;
@@ -558,6 +558,23 @@ export class ClusterRenderer {
     this.particleTraffic.addRoute(route);
   }
 
+  applyCamera(cameraView: VisualizationCamera): void {
+    const position = new THREE.Vector3(...cameraView.position);
+    const target = new THREE.Vector3(...cameraView.target);
+    this._cameraTargetAnimation = null;
+    this.camera.position.copy(position);
+    this.controls.target.copy(target);
+    this.camera.lookAt(target);
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    this._initialCameraPosition.copy(this.camera.position);
+    this._initialCameraTarget.copy(this.controls.target);
+  }
+
+  frameBounds(bounds: ClusterBounds): void {
+    this._frameRegion(bounds.minX, bounds.maxX, bounds.minZ, bounds.maxZ);
+  }
+
   frameResources(clusterBounds?: Map<string, ClusterBounds>): void {
     let minX = Infinity;
     let maxX = -Infinity;
@@ -583,6 +600,10 @@ export class ClusterRenderer {
       return;
     }
 
+    this._frameRegion(minX, maxX, minZ, maxZ);
+  }
+
+  private _frameRegion(minX: number, maxX: number, minZ: number, maxZ: number): void {
     const cx = (minX + maxX) / 2;
     const cz = (minZ + maxZ) / 2;
     const paddedWidth = Math.max(maxX - minX + 8, 12);
@@ -614,7 +635,6 @@ export class ClusterRenderer {
     this._initialCameraPosition.copy(this.camera.position);
     this._initialCameraTarget.copy(this.controls.target);
   }
-
   removeTrafficRoute(routeId: string): void {
     this.particleTraffic.removeRoute(routeId);
   }

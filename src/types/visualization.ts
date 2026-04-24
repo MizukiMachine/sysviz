@@ -103,6 +103,25 @@ export interface ClusterBounds {
   labelHeight?: number;
 }
 
+export interface VisualizationFlatDiagram {
+  svg: string;
+  width: number;
+  height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  bounds: ClusterBounds;
+}
+
+export interface VisualizationSequenceParticipant {
+  id: string;
+  label: string;
+  x: number;
+  z: number;
+  width: number;
+  height: number;
+  depth: number;
+}
+
 export interface ViewConfig {
   nodes: VisualizationNode[];
   connections: VisualizationConnection[];
@@ -113,4 +132,7 @@ export interface ViewConfig {
   nodeSubgraphs: Map<string, string>;
   rawMmdText?: string;
   clusterBounds?: Map<string, ClusterBounds>;
+  flatDiagram?: VisualizationFlatDiagram;
+  sequenceParticipants?: VisualizationSequenceParticipant[];
+  diagramType?: 'flowchart' | 'sequence';
 }

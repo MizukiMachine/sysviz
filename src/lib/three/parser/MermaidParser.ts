@@ -8,10 +8,12 @@ import type {
   VisualizationConnectionType,
   VisualizationNode,
   VisualizationRoute,
+  VisualizationSequenceParticipant,
   VisualizationSubgraph,
   VisualizationTimeline,
   VisualizationTimelineKeyframe,
   VisualizationTrafficType,
+  VisualizationFlatDiagram,
 } from '@/types/visualization';
 
 // ---------------------------------------------------------------------------
@@ -143,6 +145,7 @@ interface RawConnection {
 }
 
 interface TokenizedMermaid {
+  diagramType: 'flowchart' | 'sequence';
   direction: MermaidDirection;
   rawNodes: Map<string, RawNode>;
   rawConnections: RawConnection[];
@@ -245,6 +248,9 @@ export class MermaidParser {
 
   async parseText(mmdText: string): Promise<ViewConfig> {
     const tokens = this._tokenize(mmdText);
+    if (tokens.diagramType === 'sequence') {
+      return this._parseSequenceDiagram(mmdText, tokens);
+    }
 
     const nodes = this._buildNodes(tokens);
     const connections = this._buildConnections(tokens);
@@ -276,6 +282,7 @@ export class MermaidParser {
       nodeSubgraphs: tokens.nodeSubgraphs,
       rawMmdText: mmdText,
       clusterBounds,
+      diagramType: 'flowchart',
     };
   }
 
@@ -294,6 +301,10 @@ export class MermaidParser {
   // =========================================================================
 
   _tokenize(text: string): TokenizedMermaid {
+    if (/(?:^|\n)\s*sequenceDiagram\b/.test(text)) {
+      return this._tokenizeSequence(text);
+    }
+
     const lines = text.split('\n');
     let direction: MermaidDirection = 'LR';
     const rawNodes = new Map<string, RawNode>();
@@ -497,7 +508,94 @@ export class MermaidParser {
       }
     }
 
-    return { direction, rawNodes, rawConnections, subgraphs, styles, nodeSubgraphs };
+    return { diagramType: 'flowchart', direction, rawNodes, rawConnections, subgraphs, styles, nodeSubgraphs };
+  }
+
+  private _tokenizeSequence(text: string): TokenizedMermaid {
+    const lines = text.split('\n');
+    const rawNodes = new Map<string, RawNode>();
+    const rawConnections: RawConnection[] = [];
+    const subgraphs = new Map<string, VisualizationSubgraph>();
+    const styles = new Map<string, string>();
+    const nodeSubgraphs = new Map<string, string>();
+    let inInitBlock = false;
+
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) continue;
+
+      if (t.startsWith('%%{') && t.endsWith('}%%')) continue;
+      if (t.startsWith('%%{')) {
+        inInitBlock = true;
+        continue;
+      }
+      if (inInitBlock) {
+        if (t.endsWith('}%%')) inInitBlock = false;
+        continue;
+      }
+      if (t.startsWith('%%')) continue;
+      if (t === 'sequenceDiagram' || t === 'autonumber' || t === 'end' || t === 'else') continue;
+      if (/^(alt|opt|loop|par|and|critical|option|break|rect)\b/.test(t)) continue;
+      if (/^note\b/i.test(t)) continue;
+
+      const participantMatch = t.match(/^(participant|actor)\s+([A-Za-z0-9_.-]+)(?:\s+as\s+(.+))?$/);
+      if (participantMatch) {
+        const participantId = participantMatch[2];
+        const label = participantMatch[3]?.trim() ?? participantId;
+        this._registerInlineNode(rawNodes, participantId, label);
+        continue;
+      }
+
+      const messageMatch = t.match(/^([A-Za-z0-9_.-]+)\s*([^\s:]+)\s*([A-Za-z0-9_.-]+)\s*:\s*(.+)$/);
+      if (messageMatch) {
+        const [, sourceId, arrowToken, targetId, label] = messageMatch;
+        this._ensureNode(rawNodes, sourceId);
+        this._ensureNode(rawNodes, targetId);
+        rawConnections.push({
+          source: sourceId,
+          target: targetId,
+          sourceKind: 'node',
+          targetKind: 'node',
+          label: label.trim(),
+          lineStyle: arrowToken.includes('--') ? '-->' : '---',
+        });
+      }
+    }
+
+    return {
+      diagramType: 'sequence',
+      direction: 'LR',
+      rawNodes,
+      rawConnections,
+      subgraphs,
+      styles,
+      nodeSubgraphs,
+    };
+  }
+
+  private async _parseSequenceDiagram(mmdText: string, tokens: TokenizedMermaid): Promise<ViewConfig> {
+    const nodes = this._buildNodes(tokens);
+    const connections = this._buildConnections(tokens);
+    const rendered = await this._renderSvg(mmdText);
+    const sequenceParticipants = this._extractSequenceParticipants(rendered.svgDoc);
+    const flatDiagram = this._buildFlatDiagram(rendered.svgDoc, rendered.svg);
+    const camera = this._calculateSequenceCamera(flatDiagram.bounds);
+    const timeline = this._generateTimeline(nodes, connections, [], tokens.subgraphs, tokens.nodeSubgraphs);
+    const buildRoutes = this._createBuildRoutes(nodes, connections);
+
+    return {
+      nodes,
+      connections,
+      timeline,
+      camera,
+      buildRoutes,
+      subgraphs: tokens.subgraphs,
+      nodeSubgraphs: tokens.nodeSubgraphs,
+      rawMmdText: mmdText,
+      flatDiagram,
+      sequenceParticipants,
+      diagramType: 'sequence',
+    };
   }
 
   // =========================================================================
@@ -616,6 +714,20 @@ export class MermaidParser {
     nodeSubgraphs: Map<string, string>,
     direction: MermaidDirection,
   ): Promise<Map<string, ClusterBounds>> {
+    const { diagramId, svgDoc } = await this._renderSvg(mmdText);
+
+    const idMap = this._resolveSvgElementIds(
+      svgDoc,
+      diagramId,
+      new Set(nodes.map((node) => node.id)),
+      new Set(subgraphs.keys()),
+    );
+
+    const svgPos = this._parseSvgPositions(svgDoc);
+    return this._mapSvgTo3D(nodes, svgPos, idMap, direction, nodeSubgraphs);
+  }
+
+  private async _renderSvg(mmdText: string): Promise<{ diagramId: string; svg: string; svgDoc: Document }> {
     const diagramId = `sysviz-${++_renderCounter}`;
 
     const mermaid = await import('mermaid');
@@ -627,22 +739,121 @@ export class MermaidParser {
     });
 
     const { svg } = await mermaid.default.render(diagramId, mmdText);
-
     const svgDoc = new DOMParser().parseFromString(svg, 'image/svg+xml');
     const parseError = svgDoc.querySelector('parsererror');
     if (parseError) {
       throw new Error(`MermaidParser: failed to parse rendered SVG: ${parseError.textContent || 'unknown parser error'}`);
     }
 
-    const idMap = this._resolveSvgElementIds(
-      svgDoc,
-      diagramId,
-      new Set(nodes.map((node) => node.id)),
-      new Set(subgraphs.keys()),
-    );
+    return { diagramId, svg, svgDoc };
+  }
 
-    const svgPos = this._parseSvgPositions(svgDoc);
-    return this._mapSvgTo3D(nodes, svgPos, idMap, direction, nodeSubgraphs);
+  private _buildFlatDiagram(svgDoc: Document, svg: string): VisualizationFlatDiagram {
+    const svgEl = svgDoc.documentElement;
+    const viewBox = svgEl.getAttribute('viewBox')?.split(/[\s,]+/).map(Number) ?? [];
+    const widthAttr = Number(svgEl.getAttribute('width'));
+    const heightAttr = Number(svgEl.getAttribute('height'));
+
+    let width = widthAttr;
+    let height = heightAttr;
+    if ((!Number.isFinite(width) || !Number.isFinite(height)) && viewBox.length === 4 && viewBox.every(Number.isFinite)) {
+      width = viewBox[2];
+      height = viewBox[3];
+    }
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      throw new Error('MermaidParser: sequence SVG did not expose valid dimensions');
+    }
+
+    const targetWorldWidth = Math.max(24, Math.min(96, width * 0.03));
+    const scale = targetWorldWidth / width;
+    const worldWidth = width * scale;
+    const worldHeight = height * scale;
+
+    const sanitizedSvg = new XMLSerializer().serializeToString(svgEl);
+
+    return {
+      svg: sanitizedSvg,
+      width: worldWidth,
+      height: worldHeight,
+      sourceWidth: width,
+      sourceHeight: height,
+      bounds: {
+        minX: -worldWidth / 2,
+        maxX: worldWidth / 2,
+        minZ: -worldHeight / 2,
+        maxZ: worldHeight / 2,
+      },
+    };
+  }
+
+  private _extractSequenceParticipants(svgDoc: Document): VisualizationSequenceParticipant[] {
+    const svgEl = svgDoc.documentElement;
+    const viewBox = svgEl.getAttribute('viewBox')?.split(/[\s,]+/).map(Number) ?? [];
+    const widthAttr = Number(svgEl.getAttribute('width'));
+    const heightAttr = Number(svgEl.getAttribute('height'));
+    const sourceWidth = Number.isFinite(widthAttr) && widthAttr > 0 ? widthAttr : viewBox[2];
+    const sourceHeight = Number.isFinite(heightAttr) && heightAttr > 0 ? heightAttr : viewBox[3];
+    if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0) {
+      return [];
+    }
+
+    const targetWorldWidth = Math.max(24, Math.min(96, sourceWidth * 0.03));
+    const scale = targetWorldWidth / sourceWidth;
+    const rects = [...svgDoc.querySelectorAll<SVGRectElement>('rect.actor-top, rect.actor-bottom')];
+    const participants: VisualizationSequenceParticipant[] = [];
+    const removedGroups = new Set<Element>();
+
+    for (const rect of rects) {
+      const parentGroup = rect.closest('g');
+      if (!parentGroup || removedGroups.has(parentGroup)) continue;
+
+      const bounds = this._parseSvgRectBounds(rect);
+      if (!bounds) continue;
+
+      const texts = [...parentGroup.querySelectorAll<SVGTextElement>('text')];
+      const label = texts
+        .map((text) => (text.textContent || '').trim())
+        .filter(Boolean)
+        .join('\n');
+      const id = parentGroup.getAttribute('data-id')
+        || rect.getAttribute('name')
+        || label.split('\n')[0]
+        || `participant-${participants.length + 1}`;
+
+      const worldWidth = Math.max(1.8, bounds.width * scale);
+      const worldHeight = Math.max(0.8, bounds.height * scale);
+      const worldDepth = Math.max(0.7, Math.min(worldHeight * 1.2, 1.6));
+
+      participants.push({
+        id,
+        label,
+        x: ((bounds.x + bounds.width / 2) - sourceWidth / 2) * scale,
+        z: ((bounds.y + bounds.height / 2) - sourceHeight / 2) * scale,
+        width: worldWidth,
+        height: worldHeight,
+        depth: worldDepth,
+      });
+
+      removedGroups.add(parentGroup);
+    }
+
+    for (const group of removedGroups) {
+      group.remove();
+    }
+
+    return participants;
+  }
+
+  private _calculateSequenceCamera(bounds: ClusterBounds): VisualizationCamera {
+    const width = bounds.maxX - bounds.minX;
+    const depth = bounds.maxZ - bounds.minZ;
+    const maxSpan = Math.max(width, depth, 24);
+
+    return {
+      position: [0, Math.max(26, maxSpan * 1.18), 0.01],
+      target: [0, 0, 0],
+    };
   }
 
   /**
