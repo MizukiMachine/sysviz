@@ -12,38 +12,18 @@ const RELATIONSHIP_COLORS = {
   default: 0x64748b,
 } as const;
 
-const DASH_CONFIG = {
-  network: { dashSize: 0.3, gapSize: 0.15 },
-  sync: { dashSize: 0.6, gapSize: 0.08 },
-  async: { dashSize: 0.3, gapSize: 0.2 },
-  signal: { dashSize: 0.08, gapSize: 0.08 },
-  default: { dashSize: 0.3, gapSize: 0.15 },
-} as const;
-
-const FLOW_SPEEDS = {
-  network: 2.0,
-  sync: 2.5,
-  async: 1.0,
-  signal: 3.5,
-  default: 2.0,
-} as const;
-
 const CURVE_SEGMENTS = 32;
-const BASE_LINE_WIDTH = 1.5;
+const BASE_TUBE_RADIUS = 0.05;
 const MIN_OPACITY = 0.55;
 const MAX_OPACITY = 1.0;
-const IDLE_FLOW_MULTIPLIER = 0.4;
-const ACTIVE_FLOW_MULTIPLIER = 1.8;
 const ARROW_HEAD_LENGTH = 0.46;
 const ARROW_HEAD_RADIUS = 0.16;
 const ARROW_HEAD_OPACITY = 0.9;
 const ARROW_HEAD_T = 0.8;
 const ARROW_HEAD_Y_OFFSET = 0.08;
 
-type LineMaterial = THREE.LineBasicMaterial | THREE.LineDashedMaterial;
-
 interface ConnectionEntry {
-  line: THREE.Line<THREE.BufferGeometry, LineMaterial>;
+  body: THREE.Mesh<THREE.TubeGeometry, THREE.MeshPhysicalMaterial>;
   arrowHead: THREE.Mesh<THREE.ConeGeometry, THREE.MeshBasicMaterial>;
   connection: VisualizationConnection;
   curve: THREE.QuadraticBezierCurve3;
@@ -58,17 +38,7 @@ interface LineUserData {
   sourceId?: string;
   targetId?: string;
   type?: string;
-  flowOffset?: number;
-  flowSpeed?: number;
   curve?: THREE.QuadraticBezierCurve3;
-}
-
-interface DashedLineMaterial extends THREE.LineDashedMaterial {
-  userData: {
-    shader?: {
-      uniforms: Record<string, { value: number }>;
-    };
-  };
 }
 
 export class ConnectionLineManager {
@@ -90,14 +60,9 @@ export class ConnectionLineManager {
     return Math.min(MIN_OPACITY + trafficVolume * 0.05, MAX_OPACITY);
   }
 
-  _getBaseFlowSpeed(connection: VisualizationConnection): number {
-    const speed = FLOW_SPEEDS[connection.type as keyof typeof FLOW_SPEEDS] || FLOW_SPEEDS.default;
-    return speed * IDLE_FLOW_MULTIPLIER;
-  }
-
-  _getActiveFlowSpeed(connection: VisualizationConnection): number {
-    const speed = FLOW_SPEEDS[connection.type as keyof typeof FLOW_SPEEDS] || FLOW_SPEEDS.default;
-    return speed * ACTIVE_FLOW_MULTIPLIER;
+  _getTubeRadius(connection: VisualizationConnection): number {
+    const trafficVolume = connection.trafficVolume || 1;
+    return BASE_TUBE_RADIUS + Math.min(trafficVolume, 4) * 0.012;
   }
 
   addConnection(
@@ -115,46 +80,48 @@ export class ConnectionLineManager {
     midpoint.y += Math.min(distance * 0.3, 3);
 
     const curve = new THREE.QuadraticBezierCurve3(sourcePos, midpoint, targetPos);
-    const points = curve.getPoints(CURVE_SEGMENTS);
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
     const relationColor = RELATIONSHIP_COLORS[connection.type as keyof typeof RELATIONSHIP_COLORS] || RELATIONSHIP_COLORS.default;
     const opacity = this._getBaseOpacity(connection);
-    const dashConfig = DASH_CONFIG[connection.type as keyof typeof DASH_CONFIG] ?? DASH_CONFIG.default;
-
-    const material = new THREE.LineDashedMaterial({
+    const material = new THREE.MeshPhysicalMaterial({
       color: relationColor,
-      dashSize: dashConfig?.dashSize ?? 0.3,
-      gapSize: dashConfig?.gapSize ?? 0.15,
       transparent: true,
       opacity,
-      linewidth: BASE_LINE_WIDTH,
+      roughness: 0.36,
+      metalness: 0.08,
+      clearcoat: 0.12,
+      clearcoatRoughness: 0.45,
+      transmission: 0.02,
+      depthWrite: false,
     });
-    this._installDashOffsetAnimation(material);
+    const geometry = new THREE.TubeGeometry(
+      curve,
+      CURVE_SEGMENTS,
+      this._getTubeRadius(connection),
+      12,
+      false,
+    );
 
-    const line = new THREE.Line(geometry, material);
-    line.computeLineDistances();
-    const userData = line.userData as LineUserData;
+    const body = new THREE.Mesh(geometry, material);
+    body.renderOrder = 4;
+    const userData = body.userData as LineUserData;
     userData.connectionId = connection.id;
     userData.sourceId = connection.sourceId;
     userData.targetId = connection.targetId;
     userData.type = connection.type;
-    userData.flowOffset = 0;
-    userData.flowSpeed = this._getBaseFlowSpeed(connection);
     userData.curve = curve;
 
     const arrowHead = this._createArrowHead(relationColor);
     this._updateArrowHead(arrowHead, curve);
     const labelSprite = this._createLabelSprite(connection._label, midpoint);
 
-    this.lineGroup.add(line);
+    this.lineGroup.add(body);
     this.lineGroup.add(arrowHead);
     if (labelSprite) {
       this.lineGroup.add(labelSprite);
     }
 
     this.connections.set(connection.id, {
-      line,
+      body,
       arrowHead,
       connection,
       curve,
@@ -169,10 +136,10 @@ export class ConnectionLineManager {
     const entry = this.connections.get(connectionId);
     if (!entry) return;
 
-    this.lineGroup.remove(entry.line);
+    this.lineGroup.remove(entry.body);
     this.lineGroup.remove(entry.arrowHead);
-    entry.line.geometry.dispose();
-    entry.line.material.dispose();
+    entry.body.geometry.dispose();
+    entry.body.material.dispose();
     entry.arrowHead.geometry.dispose();
     entry.arrowHead.material.dispose();
 
@@ -215,40 +182,32 @@ export class ConnectionLineManager {
 
       const curve = new THREE.QuadraticBezierCurve3(sourcePos.clone(), midpoint, targetPos.clone());
       entry.curve = curve;
-      (entry.line.userData as LineUserData).curve = curve;
+      (entry.body.userData as LineUserData).curve = curve;
       this._updateArrowHead(entry.arrowHead, curve);
-
-      const points = curve.getPoints(CURVE_SEGMENTS);
-      entry.line.geometry.dispose();
-      entry.line.geometry = new THREE.BufferGeometry().setFromPoints(points);
-      entry.line.computeLineDistances();
+      entry.body.geometry.dispose();
+      entry.body.geometry = new THREE.TubeGeometry(
+        curve,
+        CURVE_SEGMENTS,
+        this._getTubeRadius(entry.connection),
+        12,
+        false,
+      );
     }
   }
 
   update(delta: number): void {
-    for (const entry of this.connections.values()) {
-      const line = entry.line;
-      const userData = line.userData as LineUserData;
-      userData.flowOffset = (userData.flowOffset || 0) + (userData.flowSpeed || 0) * delta;
-      const shader = (line.material as DashedLineMaterial).userData.shader;
-      if (shader?.uniforms.dashOffset) {
-        shader.uniforms.dashOffset.value = -(userData.flowOffset || 0);
-      }
-    }
+    void delta;
   }
 
   setConnectionActive(connectionId: string, active: boolean): void {
     const entry = this.connections.get(connectionId);
     if (!entry) return;
 
-    entry.line.material.opacity = active ? MAX_OPACITY : this._getBaseOpacity(entry.connection);
+    entry.body.material.opacity = active ? MAX_OPACITY : this._getBaseOpacity(entry.connection);
     entry.arrowHead.material.opacity = active ? 0.98 : ARROW_HEAD_OPACITY;
     if (entry.labelSprite) {
       entry.labelSprite.material.opacity = active ? 1 : 0.92;
     }
-    (entry.line.userData as LineUserData).flowSpeed = active
-      ? this._getActiveFlowSpeed(entry.connection)
-      : this._getBaseFlowSpeed(entry.connection);
   }
 
   private _createLabelSprite(text: string | null | undefined, midpoint: THREE.Vector3): THREE.Sprite | null {
@@ -335,23 +294,6 @@ export class ConnectionLineManager {
     return mesh;
   }
 
-  private _installDashOffsetAnimation(material: THREE.LineDashedMaterial): void {
-    const dashedMaterial = material as DashedLineMaterial;
-    dashedMaterial.onBeforeCompile = (shader) => {
-      shader.uniforms.dashOffset = { value: 0 };
-      shader.fragmentShader = shader.fragmentShader.replace(
-        'uniform float dashSize;\nuniform float totalSize;',
-        'uniform float dashSize;\nuniform float totalSize;\nuniform float dashOffset;',
-      );
-      shader.fragmentShader = shader.fragmentShader.replace(
-        'if ( mod( vLineDistance, totalSize ) > dashSize ) {',
-        'if ( mod( vLineDistance + dashOffset, totalSize ) > dashSize ) {',
-      );
-      dashedMaterial.userData.shader = shader as DashedLineMaterial['userData']['shader'];
-    };
-    dashedMaterial.needsUpdate = true;
-  }
-
   private _updateArrowHead(
     arrowHead: THREE.Mesh<THREE.ConeGeometry, THREE.MeshBasicMaterial>,
     curve: THREE.QuadraticBezierCurve3,
@@ -385,7 +327,7 @@ export class ConnectionLineManager {
     const centerX = (bounds.minX + bounds.maxX) / 2;
     const centerZ = (bounds.minZ + bounds.maxZ) / 2;
     if (!oppositePos) {
-      return new THREE.Vector3(centerX, 0.05, centerZ);
+      return new THREE.Vector3(centerX, 0.62, centerZ);
     }
 
     const dx = oppositePos.x - centerX;
@@ -399,7 +341,7 @@ export class ConnectionLineManager {
 
     return new THREE.Vector3(
       centerX + dx * Math.max(scale - inset, 0),
-      0.05,
+      0.62,
       centerZ + dz * Math.max(scale - inset, 0),
     );
   }

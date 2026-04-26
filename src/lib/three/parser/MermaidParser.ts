@@ -290,6 +290,7 @@ export class MermaidParser {
     this._applyDataLabels(nodes, connections);
     const rendered = await this._renderSvg(mmdText);
     this._removeFlowchartNodeGroups(rendered.svgDoc);
+    this._removeFlowchartClusterLabels(rendered.svgDoc);
     const flatDiagram = flatDiagramTransform
       ? this._buildFlatDiagram(rendered.svgDoc, rendered.svg, flatDiagramTransform)
       : undefined;
@@ -914,6 +915,24 @@ export class MermaidParser {
     const nodeGroups = [...svgDoc.querySelectorAll<SVGGElement>('g.node')];
     for (const group of nodeGroups) {
       group.remove();
+    }
+  }
+
+  private _removeFlowchartClusterLabels(svgDoc: Document): void {
+    const labelGroups = [
+      ...svgDoc.querySelectorAll<SVGGElement>('g.cluster-label'),
+      ...svgDoc.querySelectorAll<SVGGElement>('g.cluster-label-group'),
+    ];
+    for (const group of labelGroups) {
+      group.remove();
+    }
+
+    const foreignObjects = [...svgDoc.querySelectorAll<SVGForeignObjectElement>('foreignObject')];
+    for (const foreignObject of foreignObjects) {
+      const parentClass = foreignObject.parentElement?.getAttribute('class') ?? '';
+      if (parentClass.includes('cluster-label')) {
+        foreignObject.remove();
+      }
     }
   }
 
