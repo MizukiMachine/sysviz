@@ -10,9 +10,7 @@ const STATUS_COLORS = {
 } as const;
 
 const BASE_COLOR = 0xe2e8f0;
-const TEXT_COLOR = '#334155';
-const LABEL_BG = 'rgba(255, 255, 255, 0.72)';
-const LABEL_STROKE = 'rgba(148, 163, 184, 0.32)';
+const TEXT_COLOR = '#1e293b';
 const _labelTextureCache = new Map<string, THREE.CanvasTexture>();
 
 interface LabelSpriteOptions {
@@ -148,40 +146,14 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
   const safeLines = lines.length > 0 ? lines : [''];
 
   ctx.clearRect(0, 0, width, height);
-  ctx.font = `600 ${fontSize}px ${fontFamily}`;
+  ctx.font = `700 ${fontSize}px ${fontFamily}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  const metrics = safeLines.map((line) => ctx.measureText(line).width);
-  const textWidth = Math.min(Math.max(...metrics, 0) + 40, width - 12);
-  const lineHeight = Math.round(fontSize * 1.15);
-  const contentHeight = Math.max(lineHeight * safeLines.length, fontSize + 22);
-  const boxHeight = Math.min(height - 16, contentHeight + 20);
-  const boxX = (width - textWidth) / 2;
-  const boxY = (height - boxHeight) / 2;
-  const radius = 12;
-
-  ctx.fillStyle = LABEL_BG;
-  ctx.beginPath();
-  ctx.moveTo(boxX + radius, boxY);
-  ctx.lineTo(boxX + textWidth - radius, boxY);
-  ctx.quadraticCurveTo(boxX + textWidth, boxY, boxX + textWidth, boxY + radius);
-  ctx.lineTo(boxX + textWidth, boxY + boxHeight - radius);
-  ctx.quadraticCurveTo(boxX + textWidth, boxY + boxHeight, boxX + textWidth - radius, boxY + boxHeight);
-  ctx.lineTo(boxX + radius, boxY + boxHeight);
-  ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
-  ctx.lineTo(boxX, boxY + radius);
-  ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = LABEL_STROKE;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
+  const lineHeight = Math.round(fontSize * 1.02);
   ctx.fillStyle = TEXT_COLOR;
-  ctx.shadowColor = 'rgba(255, 255, 255, 0.7)';
-  ctx.shadowBlur = 6;
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.18)';
+  ctx.shadowBlur = 2;
   const startY = height / 2 - ((safeLines.length - 1) * lineHeight) / 2;
   for (const [index, line] of safeLines.entries()) {
     ctx.fillText(line, width / 2, startY + index * lineHeight, maxTextWidth);
@@ -255,22 +227,22 @@ function addBoxLabels(group: ResourceGroup, resource: VisualizationNode, width: 
   const labelText = resource.fullLabel || resource.name || resource.id || 'Node';
 
   const topLabel = createLabelPlane(labelText, {
-    fontSize: 42,
-    width: 1200,
-    height: 256,
-    maxTextWidth: 1120,
-    scale: { x: width * 0.92, y: depth * 0.74, z: 1 },
+    fontSize: 88,
+    width: 1600,
+    height: 420,
+    maxTextWidth: 1540,
+    scale: { x: width * 0.98, y: depth * 0.92, z: 1 },
   });
   topLabel.rotation.x = -Math.PI / 2;
   topLabel.position.set(0, height / 2 + 0.04, 0);
   group.add(topLabel);
 
   const frontLabel = createLabelPlane(labelText, {
-    fontSize: 38,
-    width: 1200,
-    height: 320,
-    maxTextWidth: 1120,
-    scale: { x: width * 0.92, y: height * 0.8, z: 1 },
+    fontSize: 92,
+    width: 1600,
+    height: 540,
+    maxTextWidth: 1540,
+    scale: { x: width * 0.98, y: height * 0.94, z: 1 },
   });
   frontLabel.position.set(0, 0, depth / 2 + 0.04);
   group.add(frontLabel);

@@ -6,10 +6,14 @@ const FLOOR_OPACITY = 0.3;
 const BORDER_COLOR = 0x94a3b8;
 const BORDER_OPACITY = 0.5;
 const FALLBACK_PADDING = 0.8;
+const LABEL_MIN_HEIGHT = 1.28;
+const LABEL_VERTICAL_PADDING = 0.9;
+const LABEL_BASE_Y = 0.72;
+const LABEL_FORWARD_OFFSET = 0.52;
 
 interface SubgraphEntry {
   group: THREE.Group;
-  floorPlane: THREE.Mesh;
+  labelPlane: THREE.Mesh;
 }
 
 interface DisposableObject3D extends THREE.Object3D {
@@ -36,6 +40,13 @@ function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTe
   const underlineOffset = Math.round(textBlockHeight / 2 + fontSize * 0.2);
 
   ctx.clearRect(0, 0, cW, cH);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.86)';
+  roundRect(ctx, 24, 96, cW - 48, cH - 192, 36);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.32)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
   ctx.fillStyle = 'rgba(51, 65, 85, 0.85)';
   ctx.font = `700 ${fontSize}px "Inter", sans-serif`;
   ctx.textAlign = 'center';
@@ -60,6 +71,27 @@ function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTe
   return texture;
 }
 
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
 export class SubgraphRenderer {
   scene: THREE.Scene;
   group: THREE.Group;
@@ -78,6 +110,7 @@ export class SubgraphRenderer {
     nodeSubgraphs: Map<string, string>,
     resourceMeshes: Map<string, THREE.Group>,
     clusterBounds?: Map<string, ClusterBounds>,
+    showFloor = true,
   ): void {
     this.clear();
 
@@ -129,52 +162,65 @@ export class SubgraphRenderer {
       const depth = maxZ - minZ + (svgBounds ? 0 : FALLBACK_PADDING * 2);
       const cx = (minX + maxX) / 2;
       const cz = (minZ + maxZ) / 2;
+      let topY = 0;
+
+      for (const nodeId of members) {
+        const mesh = resourceMeshes.get(nodeId);
+        if (!mesh) continue;
+        const halfHeight = Number((mesh.userData as { halfHeight?: number }).halfHeight ?? 0.65);
+        topY = Math.max(topY, mesh.position.y + halfHeight);
+      }
 
       const sgGroup = new THREE.Group();
 
-      // Floor plane (底面のみ)
-      const floorGeo = new THREE.PlaneGeometry(width, depth);
-      const floorMat = new THREE.MeshBasicMaterial({
-        color: FLOOR_COLOR,
-        transparent: true,
-        opacity: FLOOR_OPACITY,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-      floorMesh.rotation.x = -Math.PI / 2;
-      floorMesh.position.set(cx, 0.01, cz);
-      sgGroup.add(floorMesh);
+      if (showFloor) {
+        // Floor plane (底面のみ)
+        const floorGeo = new THREE.PlaneGeometry(width, depth);
+        const floorMat = new THREE.MeshBasicMaterial({
+          color: FLOOR_COLOR,
+          transparent: true,
+          opacity: FLOOR_OPACITY,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+        floorMesh.rotation.x = -Math.PI / 2;
+        floorMesh.position.set(cx, 0.01, cz);
+        sgGroup.add(floorMesh);
 
-      // Border outline (底面の枠線)
-      const borderGeo = new THREE.EdgesGeometry(floorGeo);
-      const borderMat = new THREE.LineBasicMaterial({
-        color: BORDER_COLOR,
-        transparent: true,
-        opacity: BORDER_OPACITY,
-      });
-      const border = new THREE.LineSegments(borderGeo, borderMat);
-      border.rotation.x = -Math.PI / 2;
-      border.position.set(cx, 0.01, cz);
-      sgGroup.add(border);
+        // Border outline (底面の枠線)
+        const borderGeo = new THREE.EdgesGeometry(floorGeo);
+        const borderMat = new THREE.LineBasicMaterial({
+          color: BORDER_COLOR,
+          transparent: true,
+          opacity: BORDER_OPACITY,
+        });
+        const border = new THREE.LineSegments(borderGeo, borderMat);
+        border.rotation.x = -Math.PI / 2;
+        border.position.set(cx, 0.01, cz);
+        sgGroup.add(border);
+      }
 
       const title = sg.title || sg.id;
 
       const planeW = Math.min(
-        Math.max(svgBounds?.labelWidth ?? width * (members.length === 1 ? 1.4 : 0.5), 2.4),
-        Math.max(width - 0.4, 2.4),
+        Math.max(
+          svgBounds?.labelWidth ? svgBounds.labelWidth * 1.75 : width * (members.length === 1 ? 1.4 : 0.6),
+          4.4,
+        ),
+        Math.max(width - 0.2, 4.4),
       );
-      const planeD = Math.max(
-        Math.min(svgBounds?.labelHeight ?? 0.7, Math.max(depth - 0.4, 0.7)),
-        0.55,
+      const planeH = Math.max(
+        svgBounds?.labelHeight ? svgBounds.labelHeight * 2.1 : LABEL_MIN_HEIGHT,
+        LABEL_MIN_HEIGHT,
       );
 
       // Normalize font size so text appears at consistent world-space height
-      const TEXT_TARGET_HEIGHT = 0.55;
-      const fontSize = Math.min(180, Math.max(32, Math.round(TEXT_TARGET_HEIGHT / planeD * 512)));
+      const TEXT_TARGET_HEIGHT = 0.92;
+      const fontSize = Math.min(220, Math.max(46, Math.round(TEXT_TARGET_HEIGHT / planeH * 512)));
       const floorTex = createFloorLabelTexture(title, fontSize);
 
-      const labelGeo = new THREE.PlaneGeometry(planeW, planeD);
+      const labelGeo = new THREE.PlaneGeometry(planeW, planeH);
       const labelMat = new THREE.MeshBasicMaterial({
         map: floorTex,
         transparent: true,
@@ -183,16 +229,17 @@ export class SubgraphRenderer {
         side: THREE.DoubleSide,
       });
       const floorPlane = new THREE.Mesh(labelGeo, labelMat);
-      floorPlane.rotation.x = -Math.PI / 2;
       const labelX = svgBounds?.labelCenterX ?? cx;
-      const labelZ = svgBounds?.labelCenterZ ?? cz + Math.max(0, depth / 2 - 0.3);
-      floorPlane.position.set(labelX, 0.02, labelZ);
+      const labelZBase = svgBounds?.labelCenterZ ?? cz + depth / 2 - planeH * 0.15;
+      const labelY = Math.max(LABEL_BASE_Y, topY + LABEL_VERTICAL_PADDING);
+      const labelZ = labelZBase + Math.min(depth * 0.14, LABEL_FORWARD_OFFSET);
+      floorPlane.position.set(labelX, labelY, labelZ);
       floorPlane.userData.isLabel = true;
-      floorPlane.renderOrder = 5;
+      floorPlane.renderOrder = 8;
       sgGroup.add(floorPlane);
 
       this.group.add(sgGroup);
-      this.subgraphs.set(sg.id, { group: sgGroup, floorPlane });
+      this.subgraphs.set(sg.id, { group: sgGroup, labelPlane: floorPlane });
     }
   }
 

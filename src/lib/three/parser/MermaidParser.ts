@@ -185,6 +185,17 @@ interface SvgRectBounds {
   height: number;
 }
 
+interface FlatDiagramTransform {
+  scale: number;
+  centerX: number;
+  centerZ: number;
+}
+
+interface MermaidLayoutResult {
+  clusterBounds: Map<string, ClusterBounds>;
+  flatDiagramTransform: FlatDiagramTransform;
+}
+
 type BuildRoutesFn = ViewConfig['buildRoutes'];
 
 // ---------------------------------------------------------------------------
@@ -256,9 +267,18 @@ export class MermaidParser {
     const connections = this._buildConnections(tokens);
 
     let clusterBounds: Map<string, ClusterBounds> | undefined;
+    let flatDiagramTransform: FlatDiagramTransform | null = null;
 
     try {
-      clusterBounds = await this._layoutFromMermaid(mmdText, nodes, tokens.subgraphs, tokens.nodeSubgraphs, tokens.direction);
+      const layout = await this._layoutFromMermaid(
+        mmdText,
+        nodes,
+        tokens.subgraphs,
+        tokens.nodeSubgraphs,
+        tokens.direction,
+      );
+      clusterBounds = layout.clusterBounds;
+      flatDiagramTransform = layout.flatDiagramTransform;
     } catch (e) {
       console.warn('MermaidParser: mermaid.render() layout failed; using deterministic fallback layout:', e);
       this._layoutDeterministicFallback(nodes, connections, tokens.direction);
@@ -270,8 +290,12 @@ export class MermaidParser {
     this._applyDataLabels(nodes, connections);
     const rendered = await this._renderSvg(mmdText);
     this._removeFlowchartNodeGroups(rendered.svgDoc);
-    const flatDiagram = this._buildFlatDiagram(rendered.svgDoc, rendered.svg);
-    const camera = this._calculateFlatDiagramCamera(flatDiagram.bounds, 'flowchart');
+    const flatDiagram = flatDiagramTransform
+      ? this._buildFlatDiagram(rendered.svgDoc, rendered.svg, flatDiagramTransform)
+      : undefined;
+    const camera = flatDiagram
+      ? this._calculateFlatDiagramCamera(flatDiagram.bounds, 'flowchart')
+      : this._calculateCamera(nodes);
     const timeline = this._generateTimeline(nodes, connections, layers, tokens.subgraphs, tokens.nodeSubgraphs);
     const buildRoutes = this._createBuildRoutes(nodes, connections);
 
@@ -720,7 +744,7 @@ export class MermaidParser {
     subgraphs: Map<string, VisualizationSubgraph>,
     nodeSubgraphs: Map<string, string>,
     direction: MermaidDirection,
-  ): Promise<Map<string, ClusterBounds>> {
+  ): Promise<MermaidLayoutResult> {
     const { diagramId, svgDoc } = await this._renderSvg(mmdText);
 
     const idMap = this._resolveSvgElementIds(
@@ -755,11 +779,17 @@ export class MermaidParser {
     return { diagramId, svg, svgDoc };
   }
 
-  private _buildFlatDiagram(svgDoc: Document, svg: string): VisualizationFlatDiagram {
+  private _buildFlatDiagram(
+    svgDoc: Document,
+    svg: string,
+    transform?: FlatDiagramTransform,
+  ): VisualizationFlatDiagram {
     const svgEl = svgDoc.documentElement;
     const viewBox = svgEl.getAttribute('viewBox')?.split(/[\s,]+/).map(Number) ?? [];
     const widthAttr = Number(svgEl.getAttribute('width'));
     const heightAttr = Number(svgEl.getAttribute('height'));
+    const viewBoxMinX = viewBox.length === 4 && Number.isFinite(viewBox[0]) ? viewBox[0] : 0;
+    const viewBoxMinY = viewBox.length === 4 && Number.isFinite(viewBox[1]) ? viewBox[1] : 0;
 
     let width = widthAttr;
     let height = heightAttr;
@@ -772,24 +802,34 @@ export class MermaidParser {
       throw new Error('MermaidParser: sequence SVG did not expose valid dimensions');
     }
 
-    const targetWorldWidth = Math.max(24, Math.min(96, width * 0.03));
-    const scale = targetWorldWidth / width;
-    const worldWidth = width * scale;
-    const worldHeight = height * scale;
-
     const sanitizedSvg = new XMLSerializer().serializeToString(svgEl);
+    const scale = transform
+      ? transform.scale
+      : Math.max(24, Math.min(96, width * 0.03)) / width;
+    const minX = transform
+      ? (viewBoxMinX - transform.centerX) * scale
+      : -(width * scale) / 2;
+    const maxX = transform
+      ? (viewBoxMinX + width - transform.centerX) * scale
+      : (width * scale) / 2;
+    const minZ = transform
+      ? (viewBoxMinY - transform.centerZ) * scale
+      : -(height * scale) / 2;
+    const maxZ = transform
+      ? (viewBoxMinY + height - transform.centerZ) * scale
+      : (height * scale) / 2;
 
     return {
       svg: sanitizedSvg,
-      width: worldWidth,
-      height: worldHeight,
+      width: maxX - minX,
+      height: maxZ - minZ,
       sourceWidth: width,
       sourceHeight: height,
       bounds: {
-        minX: -worldWidth / 2,
-        maxX: worldWidth / 2,
-        minZ: -worldHeight / 2,
-        maxZ: worldHeight / 2,
+        minX,
+        maxX,
+        minZ,
+        maxZ,
       },
     };
   }
@@ -1124,7 +1164,7 @@ export class MermaidParser {
     idMap: Map<string, string>,
     direction: MermaidDirection,
     nodeSubgraphs: Map<string, string>,
-  ): Map<string, ClusterBounds> {
+  ): MermaidLayoutResult {
     const clusterBounds = new Map<string, ClusterBounds>();
 
     const nodeLookup = new Map<string, SvgNodePosition>();
@@ -1197,7 +1237,9 @@ export class MermaidParser {
       }
     }
 
-    if (!Number.isFinite(rawMinX)) return clusterBounds;
+    if (!Number.isFinite(rawMinX)) {
+      throw new Error('MermaidParser: rendered SVG did not produce finite layout extents');
+    }
 
     const rawExtentX = rawMaxX - rawMinX;
     const rawExtentZ = rawMaxZ - rawMinZ;
@@ -1296,7 +1338,14 @@ export class MermaidParser {
     }
 
     if (clusterBounds.size === 0) {
-      return this._computeClusterBoundsFromNodes(nodes, nodeSubgraphs);
+      return {
+        clusterBounds: this._computeClusterBoundsFromNodes(nodes, nodeSubgraphs),
+        flatDiagramTransform: {
+          scale,
+          centerX: rawCX,
+          centerZ: rawCZ,
+        },
+      };
     }
 
     for (const [clusterId, fallback] of this._computeClusterBoundsFromNodes(nodes, nodeSubgraphs)) {
@@ -1305,7 +1354,14 @@ export class MermaidParser {
       }
     }
 
-    return clusterBounds;
+    return {
+      clusterBounds,
+      flatDiagramTransform: {
+        scale,
+        centerX: rawCX,
+        centerZ: rawCZ,
+      },
+    };
   }
 
   /**

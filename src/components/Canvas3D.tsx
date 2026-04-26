@@ -10,7 +10,7 @@ export interface Canvas3DHandle {
   subgraphRenderer: SubgraphRenderer | null;
   flatDiagramRenderer: FlatDiagramRenderer | null;
   sequenceParticipantRenderer: SequenceParticipantRenderer | null;
-  loadView: (view: ViewConfig) => void;
+  loadView: (view: ViewConfig) => Promise<void>;
   clearScene: () => void;
 }
 
@@ -107,8 +107,28 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
     sequenceParticipants.clear();
   }, []);
 
+  const clearOverlays = useCallback(() => {
+    const renderer = rendererRef.current;
+    const sg = subgraphRef.current;
+    const sequenceParticipants = sequenceParticipantRef.current;
+    if (!renderer || !sg || !sequenceParticipants) return;
+
+    for (const id of [...renderer.resourceMeshes.keys()]) {
+      renderer.removeResource(id);
+    }
+    for (const id of [...renderer.connectionLines.connections.keys()]) {
+      renderer.connectionLines.removeConnection(id);
+    }
+    for (const id of [...renderer.particleTraffic.routes.keys()]) {
+      renderer.particleTraffic.removeRoute(id);
+    }
+    renderer.clusterBounds = undefined;
+    sg.clear();
+    sequenceParticipants.clear();
+  }, []);
+
   const loadView = useCallback(
-    (view: ViewConfig) => {
+    async (view: ViewConfig) => {
       const renderer = rendererRef.current;
       const sg = subgraphRef.current;
       const flat = flatDiagramRef.current;
@@ -125,10 +145,12 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
       }
       renderer.clearTrafficParticles();
 
-      clearScene();
+      clearOverlays();
 
       if (view.flatDiagram) {
-        void flat.render(view.flatDiagram);
+        await flat.render(view.flatDiagram);
+      } else {
+        flat.clear();
       }
       sequenceParticipants.render(view.sequenceParticipants);
 
@@ -146,8 +168,14 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
         }
       }
 
-      if (!view.flatDiagram && view.subgraphs.size > 0) {
-        sg.render(view.subgraphs, view.nodeSubgraphs, renderer.resourceMeshes, view.clusterBounds);
+      if (view.subgraphs.size > 0) {
+        sg.render(
+          view.subgraphs,
+          view.nodeSubgraphs,
+          renderer.resourceMeshes,
+          view.clusterBounds,
+          !view.flatDiagram,
+        );
       }
 
       if (view.camera) {
@@ -158,7 +186,7 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
         renderer.frameResources(view.clusterBounds);
       }
     },
-    [clearScene]
+    [clearOverlays]
   );
 
   return (
