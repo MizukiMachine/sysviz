@@ -11,6 +11,7 @@ const STATUS_COLORS = {
 
 const BASE_COLOR = 0xe2e8f0;
 const TEXT_COLOR = '#1e293b';
+const LABEL_SURFACE_OFFSET = 0.08;
 const _labelTextureCache = new Map<string, THREE.CanvasTexture>();
 
 interface LabelSpriteOptions {
@@ -185,10 +186,11 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
       map: texture,
       transparent: true,
       opacity: 0.96,
-      depthTest: false,
+      depthTest: true,
       depthWrite: false,
       polygonOffset: true,
       polygonOffsetFactor: -2,
+      polygonOffsetUnits: -4,
       side: THREE.DoubleSide,
     }),
   );
@@ -198,18 +200,13 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
   return plane;
 }
 
-function createBodyMaterial(nodeColor: number, statusColor: number): THREE.MeshPhysicalMaterial {
-  return new THREE.MeshPhysicalMaterial({
+function createBodyMaterial(nodeColor: number, statusColor: number): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
     color: nodeColor,
-    metalness: 0.15,
-    roughness: 0.28,
+    metalness: 0,
+    roughness: 0.92,
     emissive: new THREE.Color(statusColor),
-    emissiveIntensity: 0.12,
-    transparent: true,
-    opacity: 0.82,
-    transmission: 0.04,
-    clearcoat: 0.28,
-    clearcoatRoughness: 0.3,
+    emissiveIntensity: 0.08,
   });
 }
 
@@ -230,21 +227,21 @@ function addBoxLabels(group: ResourceGroup, resource: VisualizationNode, width: 
     fontSize: 88,
     width: 1600,
     height: 420,
-    maxTextWidth: 1540,
-    scale: { x: width * 0.98, y: depth * 0.92, z: 1 },
+    maxTextWidth: 1590,
+    scale: { x: width * 0.995, y: depth * 0.97, z: 1 },
   });
   topLabel.rotation.x = -Math.PI / 2;
-  topLabel.position.set(0, height / 2 + 0.04, 0);
+  topLabel.position.set(0, height / 2 + LABEL_SURFACE_OFFSET, 0);
   group.add(topLabel);
 
   const frontLabel = createLabelPlane(labelText, {
     fontSize: 92,
     width: 1600,
     height: 540,
-    maxTextWidth: 1540,
-    scale: { x: width * 0.98, y: height * 0.94, z: 1 },
+    maxTextWidth: 1590,
+    scale: { x: width * 0.995, y: height * 0.97, z: 1 },
   });
-  frontLabel.position.set(0, 0, depth / 2 + 0.04);
+  frontLabel.position.set(0, 0, depth / 2 + LABEL_SURFACE_OFFSET);
   group.add(frontLabel);
 
   const idleY = resource.y || 0;

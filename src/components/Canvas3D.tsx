@@ -147,7 +147,7 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
 
       clearOverlays();
 
-      if (view.flatDiagram) {
+      if (view.flatDiagram && view.diagramType !== 'flowchart') {
         await flat.render(view.flatDiagram);
       } else {
         flat.clear();
@@ -176,13 +176,13 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
           view.nodeSubgraphs,
           renderer.resourceMeshes,
           view.clusterBounds,
-          !view.flatDiagram,
+          !(view.flatDiagram && view.diagramType !== 'flowchart'),
         );
       }
 
       if (view.camera) {
         renderer.applyCamera(view.camera);
-      } else if (view.flatDiagram) {
+      } else if (view.flatDiagram && view.diagramType !== 'flowchart') {
         renderer.frameBounds(view.flatDiagram.bounds);
       } else {
         renderer.frameResources(view.clusterBounds);

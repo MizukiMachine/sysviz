@@ -22,6 +22,14 @@ interface DisposableObject3D extends THREE.Object3D {
   material?: THREE.Material | THREE.Material[];
 }
 
+function getLabelLines(text: string): string[] {
+  const lines = text
+    .split(/<br\s*\/?>/i)
+    .map((line) => line.replace(/<[^>]+>/g, '').trim())
+    .filter(Boolean);
+  return lines.length > 0 ? lines : [text.replace(/<[^>]+>/g, '').trim()];
+}
+
 function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   const cW = 1024;
@@ -30,19 +38,18 @@ function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTe
   canvas.height = cH;
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
-  const lines = text
-    .split(/<br\s*\/?>/i)
-    .map((line) => line.replace(/<[^>]+>/g, '').trim())
-    .filter(Boolean);
-  const safeLines = lines.length > 0 ? lines : [text.replace(/<[^>]+>/g, '').trim()];
+  const safeLines = getLabelLines(text);
   const lineHeight = Math.round(fontSize * 1.25);
   const textBlockHeight = lineHeight * safeLines.length;
   const startY = cH / 2 - textBlockHeight / 2 + lineHeight / 2;
   const underlineOffset = Math.round(textBlockHeight / 2 + fontSize * 0.2);
+  const cardPaddingY = Math.max(40, Math.round(fontSize * 0.8));
+  const cardHeight = Math.min(cH - 64, textBlockHeight + cardPaddingY * 2);
+  const cardY = Math.round((cH - cardHeight) / 2);
 
   ctx.clearRect(0, 0, cW, cH);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.86)';
-  roundRect(ctx, 24, 96, cW - 48, cH - 192, 36);
+  roundRect(ctx, 24, cardY, cW - 48, cardHeight, 36);
   ctx.fill();
   ctx.strokeStyle = 'rgba(148, 163, 184, 0.32)';
   ctx.lineWidth = 3;
@@ -203,6 +210,7 @@ export class SubgraphRenderer {
       }
 
       const title = sg.title || sg.id;
+      const titleLines = getLabelLines(title);
 
       const planeW = Math.min(
         Math.max(
@@ -212,7 +220,9 @@ export class SubgraphRenderer {
         Math.max(width - 0.2, 4.4),
       );
       const planeH = Math.max(
-        svgBounds?.labelHeight ? svgBounds.labelHeight * 2.1 : LABEL_MIN_HEIGHT,
+        svgBounds?.labelHeight
+          ? svgBounds.labelHeight * (titleLines.length > 1 ? 2.5 : 2.1)
+          : LABEL_MIN_HEIGHT + (titleLines.length - 1) * 0.68,
         LABEL_MIN_HEIGHT,
       );
 
