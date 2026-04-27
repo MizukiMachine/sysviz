@@ -14,6 +14,7 @@ import type {
   VisualizationTimelineKeyframe,
   VisualizationTrafficType,
   VisualizationFlatDiagram,
+  VisualizationPathPoint,
 } from '@/types/visualization';
 
 // ---------------------------------------------------------------------------
@@ -78,6 +79,7 @@ const SVG_TRANSLATE_RE = new RegExp(
 
 const CLUSTER_NODE_MARGIN_X = 2.0;
 const CLUSTER_NODE_MARGIN_Z = 1.2;
+const FLOWCHART_FLOATING_EDGE_Y = 0.16;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -289,8 +291,20 @@ export class MermaidParser {
     this._applyColors(nodes, tokens.styles);
     this._applyDataLabels(nodes, connections);
     const rendered = await this._renderSvg(mmdText);
+    const flowchartEdgePaths = flatDiagramTransform
+      ? this._extractFlowchartEdgePaths(rendered.svgDoc, connections, flatDiagramTransform)
+      : new Map<string, VisualizationPathPoint[]>();
+    for (const connection of connections) {
+      const pathPoints = flowchartEdgePaths.get(connection.id);
+      if (pathPoints && pathPoints.length >= 2) {
+        connection.pathPoints = pathPoints;
+      }
+    }
     this._removeFlowchartNodeGroups(rendered.svgDoc);
     this._removeFlowchartClusterLabels(rendered.svgDoc);
+    if (flowchartEdgePaths.size > 0) {
+      this._removeFlowchartEdges(rendered.svgDoc);
+    }
     const flatDiagram = flatDiagramTransform
       ? this._buildFlatDiagram(rendered.svgDoc, rendered.svg, flatDiagramTransform)
       : undefined;
@@ -936,6 +950,98 @@ export class MermaidParser {
     }
   }
 
+  private _removeFlowchartEdges(svgDoc: Document): void {
+    const edgeSelectors = [
+      'g.edgePaths',
+      'g.edgeLabels',
+      'g.edgeLabel',
+      'g[class*="edgePath"]',
+      'g[class*="edgeLabel"]',
+      'path.flowchart-link',
+      'path[class*="flowchart-link"]',
+      'path[class*="edge-pattern"]',
+      'defs marker',
+    ];
+    for (const selector of edgeSelectors) {
+      for (const element of svgDoc.querySelectorAll(selector)) {
+        element.remove();
+      }
+    }
+  }
+
+  private _extractFlowchartEdgePaths(
+    svgDoc: Document,
+    connections: MermaidConnection[],
+    transform: FlatDiagramTransform,
+  ): Map<string, VisualizationPathPoint[]> {
+    const sampledPaths = this._collectFlowchartEdgePathElements(svgDoc)
+      .map((path) => this._sampleFlowchartEdgePath(path, transform))
+      .filter((points) => points.length >= 2);
+
+    const resolved = new Map<string, VisualizationPathPoint[]>();
+    const count = Math.min(connections.length, sampledPaths.length);
+    for (let index = 0; index < count; index++) {
+      resolved.set(connections[index].id, sampledPaths[index]);
+    }
+    return resolved;
+  }
+
+  private _collectFlowchartEdgePathElements(svgDoc: Document): SVGPathElement[] {
+    const resolved = new Set<SVGPathElement>();
+    const groupContainers = svgDoc.querySelectorAll<SVGGElement>('g.edgePaths > g, g.edgePath, g[class*="edgePath"]');
+    for (const group of groupContainers) {
+      const path = group.querySelector<SVGPathElement>('path.path, path.flowchart-link, path');
+      if (!path) continue;
+      if (path.closest('defs')) continue;
+      const d = path.getAttribute('d');
+      if (!d || !d.trim()) continue;
+      resolved.add(path);
+    }
+
+    if (resolved.size === 0) {
+      const directPaths = svgDoc.querySelectorAll<SVGPathElement>('path.flowchart-link, path[class*="flowchart-link"], g.edgePaths path.path');
+      for (const path of directPaths) {
+        if (path.closest('defs')) continue;
+        const d = path.getAttribute('d');
+        if (!d || !d.trim()) continue;
+        resolved.add(path);
+      }
+    }
+
+    return [...resolved];
+  }
+
+  private _sampleFlowchartEdgePath(
+    path: SVGPathElement,
+    transform: FlatDiagramTransform,
+  ): VisualizationPathPoint[] {
+    if (typeof path.getTotalLength !== 'function' || typeof path.getPointAtLength !== 'function') {
+      return [];
+    }
+
+    const totalLength = path.getTotalLength();
+    if (!Number.isFinite(totalLength) || totalLength <= 0) {
+      return [];
+    }
+
+    const translate = this._parseCumulativeTranslate(path);
+    const tx = translate?.x ?? 0;
+    const ty = translate?.y ?? 0;
+    const sampleCount = Math.max(10, Math.min(48, Math.ceil(totalLength / 24)));
+    const points: VisualizationPathPoint[] = [];
+
+    for (let index = 0; index <= sampleCount; index++) {
+      const point = path.getPointAtLength((totalLength * index) / sampleCount);
+      const worldPoint = this._svgPointToWorldPoint(point.x + tx, point.y + ty, transform);
+      const prev = points[points.length - 1];
+      if (!prev || Math.hypot(worldPoint.x - prev.x, worldPoint.z - prev.z) > 0.001) {
+        points.push(worldPoint);
+      }
+    }
+
+    return points;
+  }
+
   /**
    * Build a mapping from original Mermaid IDs to rendered SVG element IDs.
    * Mermaid v11 normally emits data-id, but the prefixed id fallback keeps this
@@ -1055,7 +1161,7 @@ export class MermaidParser {
     return { x, y, width: null, height: null, className: '', dataId: null };
   }
 
-  private _parseCumulativeTranslate(g: SVGGElement): SvgNodePosition | null {
+  private _parseCumulativeTranslate(g: Element): SvgNodePosition | null {
     let x = 0;
     let y = 0;
     let found = false;
@@ -1546,6 +1652,18 @@ export class MermaidParser {
     return { x: svgPos.x, z: svgPos.y };
   }
 
+  private _svgPointToWorldPoint(
+    svgX: number,
+    svgY: number,
+    transform: FlatDiagramTransform,
+  ): VisualizationPathPoint {
+    return {
+      x: (svgX - transform.centerX) * transform.scale,
+      y: 0,
+      z: (svgY - transform.centerZ) * transform.scale,
+    };
+  }
+
   private _computeClusterBoundsFromNodes(
     nodes: MermaidNode[],
     nodeSubgraphs: Map<string, string>,
@@ -1857,6 +1975,11 @@ export class MermaidParser {
           targetId: conn.targetId,
           sourcePos: srcMesh.position.clone(),
           targetPos: tgtMesh.position.clone(),
+          pathPoints: conn.pathPoints?.map((point) => ({
+            x: point.x,
+            y: FLOWCHART_FLOATING_EDGE_Y,
+            z: point.z,
+          })),
           payload: conn._label || nodeMap.get(conn.sourceId)?.dataOut || '',
           trafficType,
           requestRate: 1.25,

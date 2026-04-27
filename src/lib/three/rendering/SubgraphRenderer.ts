@@ -10,10 +10,11 @@ const LABEL_MIN_HEIGHT = 1.28;
 const LABEL_VERTICAL_PADDING = 0.9;
 const LABEL_BASE_Y = 0.72;
 const LABEL_FORWARD_OFFSET = 0.52;
+const TOP_LABEL_Y_OFFSET = 0.1;
 
 interface SubgraphEntry {
   group: THREE.Group;
-  labelPlane: THREE.Mesh;
+  topLabelPlane: THREE.Mesh;
 }
 
 interface DisposableObject3D extends THREE.Object3D {
@@ -228,18 +229,27 @@ export class SubgraphRenderer {
         depthTest: false,
         side: THREE.DoubleSide,
       });
-      const floorPlane = new THREE.Mesh(labelGeo, labelMat);
       const labelX = svgBounds?.labelCenterX ?? cx;
       const labelZBase = svgBounds?.labelCenterZ ?? cz + depth / 2 - planeH * 0.15;
       const labelY = Math.max(LABEL_BASE_Y, topY + LABEL_VERTICAL_PADDING);
-      const labelZ = labelZBase + Math.min(depth * 0.14, LABEL_FORWARD_OFFSET);
-      floorPlane.position.set(labelX, labelY, labelZ);
-      floorPlane.userData.isLabel = true;
-      floorPlane.renderOrder = 8;
-      sgGroup.add(floorPlane);
+      void labelZBase;
+      void labelY;
+
+      const topLabelPlane = new THREE.Mesh(labelGeo.clone(), labelMat.clone());
+      const topLabelMaterial = topLabelPlane.material as THREE.MeshBasicMaterial;
+      topLabelMaterial.map = floorTex;
+      topLabelPlane.rotation.x = -Math.PI / 2;
+      topLabelPlane.position.set(
+        labelX,
+        labelY + TOP_LABEL_Y_OFFSET,
+        svgBounds?.labelCenterZ ?? cz,
+      );
+      topLabelPlane.userData.isLabel = true;
+      topLabelPlane.renderOrder = 8;
+      sgGroup.add(topLabelPlane);
 
       this.group.add(sgGroup);
-      this.subgraphs.set(sg.id, { group: sgGroup, labelPlane: floorPlane });
+      this.subgraphs.set(sg.id, { group: sgGroup, topLabelPlane });
     }
   }
 

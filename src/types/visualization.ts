@@ -13,6 +13,11 @@ export type VisualizationConnectionType =
   | (string & {});
 export type VisualizationConnectionEndpointKind = 'node' | 'subgraph';
 export type VisualizationTrafficType = 'healthy' | 'error' | 'slow' | 'default' | (string & {});
+export interface VisualizationPathPoint {
+  x: number;
+  y: number;
+  z: number;
+}
 
 export interface VisualizationNode {
   id: string;
@@ -44,6 +49,7 @@ export interface VisualizationConnection {
   type?: VisualizationConnectionType;
   trafficVolume?: number;
   _label?: string | null;
+  pathPoints?: VisualizationPathPoint[];
 }
 
 export interface VisualizationRoute {
@@ -52,6 +58,7 @@ export interface VisualizationRoute {
   targetId: string;
   sourcePos?: THREE.Vector3 | { x: number; y: number; z: number };
   targetPos?: THREE.Vector3 | { x: number; y: number; z: number };
+  pathPoints?: Array<THREE.Vector3 | VisualizationPathPoint>;
   payload?: string;
   trafficType?: VisualizationTrafficType;
   requestRate?: number;

@@ -63,16 +63,20 @@ interface TrafficRoute extends VisualizationRoute {
   payload?: string;
   trafficType?: string;
   requestRate?: number;
-  curve?: THREE.QuadraticBezierCurve3 | null;
+  curve?: THREE.Curve<THREE.Vector3> | null;
+  pathPoints?: PointLike[];
   color?: THREE.Color;
   active?: boolean;
 }
 
 interface StoredRoute {
   id: string;
-  curve: THREE.QuadraticBezierCurve3;
+  curve: THREE.Curve<THREE.Vector3>;
   sourceId: string;
   targetId: string;
+  sourcePos?: PointLike;
+  targetPos?: PointLike;
+  pathPoints?: PointLike[];
   payload: string;
   trafficType: string;
   requestRate: number;
@@ -293,6 +297,9 @@ export class ParticleTrafficSystem {
       curve,
       sourceId: trafficRoute.sourceId,
       targetId: trafficRoute.targetId,
+      sourcePos: trafficRoute.sourcePos,
+      targetPos: trafficRoute.targetPos,
+      pathPoints: trafficRoute.pathPoints,
       payload: trafficRoute.payload || '',
       trafficType: trafficRoute.trafficType || 'default',
       requestRate: trafficRoute.requestRate || 1,
@@ -324,10 +331,14 @@ export class ParticleTrafficSystem {
       route.trafficType = updates.trafficType;
       route.color = TRAFFIC_COLORS[updates.trafficType as keyof typeof TRAFFIC_COLORS] || TRAFFIC_COLORS.default;
     }
-    if (updates.sourcePos || updates.targetPos) {
+    if (updates.sourcePos !== undefined) route.sourcePos = updates.sourcePos;
+    if (updates.targetPos !== undefined) route.targetPos = updates.targetPos;
+    if (updates.pathPoints !== undefined) route.pathPoints = updates.pathPoints;
+    if (updates.sourcePos || updates.targetPos || updates.pathPoints) {
       route.curve = this._buildCurve({
-        sourcePos: updates.sourcePos || route.curve.v0,
-        targetPos: updates.targetPos || route.curve.v2,
+        sourcePos: route.sourcePos,
+        targetPos: route.targetPos,
+        pathPoints: route.pathPoints,
         ...route,
       }) || route.curve;
     }
@@ -338,7 +349,15 @@ export class ParticleTrafficSystem {
     return new THREE.Vector3(pos.x, pos.y, pos.z);
   }
 
-  _buildCurve(route: Partial<TrafficRoute> & { curve?: THREE.QuadraticBezierCurve3 | null }): THREE.QuadraticBezierCurve3 | null {
+  _buildCurve(route: Partial<TrafficRoute> & { curve?: THREE.Curve<THREE.Vector3> | null }): THREE.Curve<THREE.Vector3> | null {
+    if (route.pathPoints && route.pathPoints.length >= 2) {
+      const points = route.pathPoints.map((point) => this._toVector3(point));
+      if (points.length === 2) {
+        return new THREE.LineCurve3(points[0], points[1]);
+      }
+      return new THREE.CatmullRomCurve3(points, false, 'centripetal');
+    }
+
     if (!route.sourcePos || !route.targetPos) {
       return route.curve || null;
     }

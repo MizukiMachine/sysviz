@@ -71,7 +71,6 @@ export class ClusterRenderer {
   mouse: THREE.Vector2;
   _clickStart: THREE.Vector2;
   _didDrag: boolean;
-  _dragCandidate: string | null;
   running: boolean;
   frameId: number | null;
   lastFrameTime: number;
@@ -81,9 +80,6 @@ export class ClusterRenderer {
   onSelect: ((resourceId: string | null) => void) | null;
   onHover: ((resourceId: string | null) => void) | null;
   onAnimate: ((delta: number) => void) | null;
-  onResourceMoved: ((resourceId: string, position: { x: number; y: number; z: number }) => void) | null;
-  _draggingResource: string | null;
-  _groundPlane: THREE.Plane;
   lockDrag: boolean;
   _onMouseMove!: (event: MouseEvent) => void;
   _onMouseDown!: (event: MouseEvent) => void;
@@ -99,7 +95,6 @@ export class ClusterRenderer {
     this.mouse = new THREE.Vector2(-999, -999);
     this._clickStart = new THREE.Vector2();
     this._didDrag = false;
-    this._dragCandidate = null;
     this.running = false;
     this.frameId = null;
     this.lastFrameTime = 0;
@@ -109,9 +104,6 @@ export class ClusterRenderer {
     this.onSelect = null;
     this.onHover = null;
     this.onAnimate = null;
-    this.onResourceMoved = null;
-    this._draggingResource = null;
-    this._groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     this.lockDrag = false;
     this.pickableObjects = [];
     this.meshFactory = new ResourceMeshFactory();
@@ -183,6 +175,9 @@ export class ClusterRenderer {
     };
     this._initialCameraTarget.copy(this.controls.target);
     this.controls.update();
+    const lockedAzimuth = this.controls.getAzimuthalAngle();
+    this.controls.minAzimuthAngle = lockedAzimuth;
+    this.controls.maxAzimuthAngle = lockedAzimuth;
   }
 
   _initLights(): void {
@@ -238,18 +233,6 @@ export class ClusterRenderer {
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-    if (this._draggingResource) {
-      const pos = this._raycastGround(this.mouse);
-      if (pos) {
-        const group = this.resourceMeshes.get(this._draggingResource);
-        if (group) {
-          group.position.x = pos.x;
-          group.position.z = pos.z;
-        }
-      }
-      return;
-    }
-
     const dx = event.clientX - this._clickStart.x;
     const dy = event.clientY - this._clickStart.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -257,57 +240,22 @@ export class ClusterRenderer {
       if (this._cameraTargetAnimation) {
         this._cameraTargetAnimation = null;
       }
-      if (this._dragCandidate && !this._didDrag) {
-        this._draggingResource = this._dragCandidate;
-        this._dragCandidate = null;
-        this.controls.enabled = false;
-        this.canvas.style.cursor = 'grabbing';
-      }
       this._didDrag = true;
     }
   }
 
   _handleMouseDown(event: MouseEvent): void {
     if (event.button === 0) {
-      if (this.lockDrag) return;
       this._clickStart.set(event.clientX, event.clientY);
       this._didDrag = false;
-      this._dragCandidate = null;
-
-      this.raycaster.setFromCamera(this.mouse, this.camera);
-      const intersects = this.raycaster.intersectObjects(this.pickableObjects, true);
-      if (intersects.length > 0) {
-        let target = intersects[0].object;
-        while (target.parent && !(target.userData as ResourceUserData).resourceId) {
-          target = target.parent;
-        }
-        const resourceId = (target.userData as ResourceUserData).resourceId;
-        if (resourceId) {
-          this._dragCandidate = resourceId;
-        }
-      }
     }
   }
 
   _handleMouseUp(event: MouseEvent): void {
-    if (this._draggingResource) {
-      const rid = this._draggingResource;
-      this._draggingResource = null;
-      this.controls.enabled = true;
-      this.canvas.style.cursor = 'default';
-      const group = this.resourceMeshes.get(rid);
-      if (group && this.onResourceMoved) {
-        this.onResourceMoved(rid, { x: group.position.x, y: 0, z: group.position.z });
-      }
-      this._didDrag = false;
-      return;
-    }
-
     if (event.button === 0 && !this._didDrag) {
       this._performPick(true);
     }
     this._didDrag = false;
-    this._dragCandidate = null;
   }
 
   _handleResize(): void {
@@ -793,13 +741,6 @@ export class ClusterRenderer {
       startTime: performance.now(),
       duration,
     };
-  }
-
-  _raycastGround(ndc: THREE.Vector2): THREE.Vector3 | null {
-    this.raycaster.setFromCamera(ndc, this.camera);
-    const intersection = new THREE.Vector3();
-    const hit = this.raycaster.ray.intersectPlane(this._groundPlane, intersection);
-    return hit ? intersection : null;
   }
 
   resetCamera(): void {

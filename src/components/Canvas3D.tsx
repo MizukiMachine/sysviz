@@ -158,7 +158,9 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
       for (const node of view.nodes) {
         renderer.addResource(node);
       }
-      if (!view.flatDiagram) {
+      const show3DConnections = !view.flatDiagram
+        || (view.diagramType === 'flowchart' && view.connections.some((conn) => (conn.pathPoints?.length ?? 0) >= 2));
+      if (show3DConnections) {
         for (const conn of view.connections) {
           renderer.addConnection(conn, view.clusterBounds);
         }
