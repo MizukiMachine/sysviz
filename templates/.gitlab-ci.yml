@@ -1,0 +1,20 @@
+sysviz-analyze:
+  image: python:3.11
+  stage: deploy
+  rules:
+    - if: $TARGET_PROJECT_PATH
+    - when: manual
+  variables:
+    SYSVIZ_LLM_PROVIDER: "gemini"
+    SYSVIZ_LLM_MODEL: "gemini-2.0-flash"
+    SYSVIZ_OUTPUT_ROOT: "outputs"
+  before_script:
+    - apt-get update && apt-get install -y git nodejs npm
+    - npm install -g gitnexus
+    - pip install -r ci/requirements.txt
+  script:
+    - python ci/sysviz-analyze.py --gitlab-url "$CI_SERVER_URL" --target-project-path "$TARGET_PROJECT_PATH" --target-ref "$TARGET_REF" --output-root "$SYSVIZ_OUTPUT_ROOT"
+  artifacts:
+    paths:
+      - outputs/
+    expire_in: 30 days

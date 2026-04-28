@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Canvas3D, type Canvas3DHandle } from './components/Canvas3D';
 import { PlaybackControls } from './components/PlaybackControls';
@@ -7,6 +7,8 @@ import { CaptionBar } from './components/CaptionBar';
 import { usePlayback } from './hooks/usePlayback';
 import { useChat } from './hooks/useChat';
 import { useVisualizationController } from './hooks/useVisualizationController';
+import { BUILTIN_VIEW_OPTIONS, DEFAULT_VIEW } from './lib/views/viewRegistry';
+import { useGitLab } from './hooks/useGitLab';
 
 const ChatPanel = lazy(() =>
   import('./components/ChatPanel').then((module) => ({ default: module.ChatPanel }))
@@ -24,11 +26,19 @@ export default function App() {
     prev,
   } = usePlayback();
   const chat = useChat();
+  const gitLab = useGitLab();
   const { selectedView, disabledOptions, handleViewChange, mermaidView, rawMmdText, isEnriching, isLoadingView } = useVisualizationController({
     canvasRef,
     initEngine,
     stop,
+    gitLabService: gitLab.configured ? gitLab.service : null,
   });
+  const allViews = useMemo(() => [...BUILTIN_VIEW_OPTIONS, ...gitLab.views], [gitLab.views]);
+
+  useEffect(() => {
+    if (allViews.some((view) => view.value === selectedView)) return;
+    handleViewChange(DEFAULT_VIEW);
+  }, [allViews, handleViewChange, selectedView]);
 
   return (
     <div className="relative w-full h-full overflow-hidden">
@@ -38,6 +48,14 @@ export default function App() {
         value={selectedView}
         onChange={handleViewChange}
         disabledOptions={disabledOptions}
+        builtInViews={BUILTIN_VIEW_OPTIONS}
+        gitLabViews={gitLab.views}
+        gitLabEnabled={gitLab.settings.enabled}
+        gitLabLoading={gitLab.isLoading}
+        gitLabRefreshing={gitLab.isTriggering}
+        gitLabError={gitLab.error}
+        onRefreshGitLab={() => { void gitLab.refreshManifest(); }}
+        onTriggerReanalyze={() => { void gitLab.triggerReanalyze(); }}
       />
 
       {(isEnriching || isLoadingView) && (
@@ -88,10 +106,12 @@ export default function App() {
             isLoading={chat.isLoading}
             error={chat.error}
             settings={chat.settings}
+            gitLabSettings={gitLab.settings}
             onSendMessage={(text) => chat.sendMessage(text, playbackInfo, selectedView, mermaidView, rawMmdText)}
             onStopStreaming={chat.stopStreaming}
             onClearChat={chat.clearChat}
             onUpdateSettings={chat.updateSettings}
+            onUpdateGitLabSettings={gitLab.updateSettings}
           />
         </Suspense>
       )}

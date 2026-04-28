@@ -6,6 +6,7 @@ import { SettingsDialog } from './SettingsDialog';
 import type { PlaybackInfo } from '@/hooks/usePlayback';
 import type { ViewConfig } from '@/types/visualization';
 import type { LLMSettings } from '@/lib/llm/SettingsService';
+import type { GitLabSettings } from '@/lib/gitlab/GitLabSettings';
 import type { ChatMessage as ChatMessageType } from '@/hooks/useChat';
 
 const MIN_WIDTH = 320;
@@ -22,10 +23,12 @@ interface ChatPanelProps {
   isLoading: boolean;
   error: string | null;
   settings: LLMSettings;
+  gitLabSettings: GitLabSettings;
   onSendMessage: (text: string) => void;
   onStopStreaming: () => void;
   onClearChat: () => void;
   onUpdateSettings: (settings: LLMSettings) => void;
+  onUpdateGitLabSettings: (settings: GitLabSettings) => void;
 }
 
 // Suggestion pools by context
@@ -87,10 +90,12 @@ export function ChatPanel({
   isLoading,
   error,
   settings,
+  gitLabSettings,
   onSendMessage,
   onStopStreaming,
   onClearChat,
   onUpdateSettings,
+  onUpdateGitLabSettings,
 }: ChatPanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -228,7 +233,9 @@ export function ChatPanel({
       {showSettings && (
         <SettingsDialog
           settings={settings}
+          gitLabSettings={gitLabSettings}
           onSave={onUpdateSettings}
+          onSaveGitLab={onUpdateGitLabSettings}
           onClose={() => setShowSettings(false)}
         />
       )}

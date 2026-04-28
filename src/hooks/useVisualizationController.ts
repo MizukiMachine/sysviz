@@ -2,23 +2,28 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_VIEW,
   MERMAID_PATHS,
+  isGitLabView,
+  resolveGitLabFilePath,
   type VisualizationKey,
 } from '@/lib/views/viewRegistry';
 import type { Canvas3DHandle } from '@/components/Canvas3D';
 import type { ViewConfig } from '@/types/visualization';
 import { enrichCaptions } from '@/lib/llm/CaptionGenerator';
 import { loadSettings, getActiveConfig } from '@/lib/llm/SettingsService';
+import type { GitLabService } from '@/lib/gitlab/GitLabService';
 
 interface UseVisualizationControllerArgs {
   canvasRef: React.RefObject<Canvas3DHandle | null>;
   initEngine: (renderer: NonNullable<Canvas3DHandle['renderer']>, timeline: ViewConfig['timeline']) => unknown;
   stop: () => void;
+  gitLabService?: GitLabService | null;
 }
 
 export function useVisualizationController({
   canvasRef,
   initEngine,
   stop,
+  gitLabService,
 }: UseVisualizationControllerArgs) {
   const [selectedView, setSelectedView] = useState<VisualizationKey>(DEFAULT_VIEW);
   const [disabledOptions, setDisabledOptions] = useState<Set<VisualizationKey>>(new Set());
@@ -37,9 +42,18 @@ export function useVisualizationController({
   }, []);
 
   const fetchView = useCallback(async (viewKey: VisualizationKey, signal?: AbortSignal): Promise<ViewConfig> => {
-    const path = MERMAID_PATHS[viewKey];
     const { MermaidParser } = await getParser();
-    const data = await new MermaidParser().parse(path);
+    const parser = new MermaidParser();
+    const data = isGitLabView(viewKey)
+      ? await parser.parseText(
+          await (async () => {
+            if (!gitLabService) {
+              throw new Error('GitLab service is not available');
+            }
+            return gitLabService.fetchMmdFile(resolveGitLabFilePath(viewKey), signal);
+          })()
+        )
+      : await parser.parse(MERMAID_PATHS[viewKey]);
 
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -58,7 +72,7 @@ export function useVisualizationController({
     } finally {
       if (!signal?.aborted) setIsEnriching(false);
     }
-  }, [getParser]);
+  }, [getParser, gitLabService]);
 
   // Initial fetch for DEFAULT_VIEW
   useEffect(() => {
