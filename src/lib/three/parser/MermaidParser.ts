@@ -10,8 +10,6 @@ import type {
   VisualizationRoute,
   VisualizationSequenceParticipant,
   VisualizationSubgraph,
-  VisualizationTimeline,
-  VisualizationTimelineKeyframe,
   VisualizationTrafficType,
   VisualizationFlatDiagram,
   VisualizationPathPoint,
@@ -287,7 +285,6 @@ export class MermaidParser {
       clusterBounds = this._computeClusterBoundsFromNodes(nodes, tokens.nodeSubgraphs);
     }
 
-    const layers = this._extractLayers(nodes, tokens.direction);
     this._applyColors(nodes, tokens.styles);
     this._applyDataLabels(nodes, connections);
     const rendered = await this._renderSvg(mmdText);
@@ -311,13 +308,11 @@ export class MermaidParser {
     const camera = flatDiagram
       ? this._calculateFlatDiagramCamera(flatDiagram.bounds, 'flowchart')
       : this._calculateCamera(nodes);
-    const timeline = this._generateTimeline(nodes, connections, layers, tokens.subgraphs, tokens.nodeSubgraphs);
     const buildRoutes = this._createBuildRoutes(nodes, connections);
 
     return {
       nodes,
       connections,
-      timeline,
       camera,
       buildRoutes,
       subgraphs: tokens.subgraphs,
@@ -623,13 +618,11 @@ export class MermaidParser {
     const sequenceParticipants = this._extractSequenceParticipants(rendered.svgDoc);
     const flatDiagram = this._buildFlatDiagram(rendered.svgDoc, rendered.svg);
     const camera = this._calculateFlatDiagramCamera(flatDiagram.bounds, 'sequence');
-    const timeline = this._generateTimeline(nodes, connections, [], tokens.subgraphs, tokens.nodeSubgraphs);
     const buildRoutes = this._createBuildRoutes(nodes, connections);
 
     return {
       nodes,
       connections,
-      timeline,
       camera,
       buildRoutes,
       subgraphs: tokens.subgraphs,
@@ -1773,40 +1766,8 @@ export class MermaidParser {
   }
 
   // =========================================================================
-  // Layers, colors, data labels (unchanged)
+  // Colors, data labels (unchanged)
   // =========================================================================
-
-  _extractLayers(nodes: MermaidNode[], direction: MermaidDirection): string[][] {
-    const order = direction === 'RL' || direction === 'BT' ? -1 : 1;
-    const sorted = [...nodes].sort((a, b) => (a.x - b.x) * order);
-
-    if (sorted.length === 0) return [];
-
-    const flowPositions = sorted.map((n) => n.x);
-    let minGap = Infinity;
-    for (let i = 1; i < flowPositions.length; i++) {
-      const gap = Math.abs(flowPositions[i] - flowPositions[i - 1]);
-      if (gap > 0 && gap < minGap) minGap = gap;
-    }
-    const TOLERANCE = Number.isFinite(minGap) ? minGap * 0.4 : 1.8;
-
-    const layers: string[][] = [];
-    let currentLayer: string[] = [];
-    let currentFlowPos: number | null = null;
-
-    for (const node of sorted) {
-      if (currentFlowPos === null || Math.abs(node.x - currentFlowPos) > TOLERANCE) {
-        if (currentLayer.length > 0) layers.push(currentLayer);
-        currentLayer = [node.id];
-        currentFlowPos = node.x;
-      } else {
-        currentLayer.push(node.id);
-      }
-    }
-    if (currentLayer.length > 0) layers.push(currentLayer);
-
-    return layers;
-  }
 
   _applyColors(nodes: MermaidNode[], styles: Map<string, string>): void {
     for (const node of nodes) {
@@ -1880,74 +1841,6 @@ export class MermaidParser {
       position: [cx, camY, cz + camOffsetZ],
       target: [cx, 0, cz],
     };
-  }
-
-  // =========================================================================
-  // Timeline (unchanged)
-  // =========================================================================
-
-  _generateTimeline(
-    nodes: MermaidNode[],
-    connections: MermaidConnection[],
-    layers: string[][],
-    subgraphs: Map<string, VisualizationSubgraph>,
-    nodeSubgraphs: Map<string, string>,
-  ): VisualizationTimeline {
-    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-    const NODE_DURATION = 3.5;
-    const ROUTE_ON = 0.5;
-    const ROUTE_OFF = 3.3;
-
-    const outMap = new Map<string, MermaidConnection[]>();
-    for (const connection of connections) {
-      if (connection.sourceKind !== 'node' || connection.targetKind !== 'node') continue;
-      if (!outMap.has(connection.sourceId)) outMap.set(connection.sourceId, []);
-      outMap.get(connection.sourceId)?.push(connection);
-    }
-
-    const keyframes: VisualizationTimelineKeyframe[] = [];
-    const activeOrder: Array<{ time: number; id: string }> = [];
-    let time = 0;
-
-    for (const layer of layers) {
-      for (const nodeId of layer) {
-        const node = nodeMap.get(nodeId);
-        if (!node) continue;
-
-        const sgId = nodeSubgraphs.get(nodeId);
-        const sg = sgId ? subgraphs.get(sgId) : null;
-        const phase = sg ? sg.title.split('/')[0].trim() : '';
-        const caption = phase ? `${phase}: ${node.name} を実行します` : `${node.name} を処理中`;
-
-        keyframes.push({
-          time,
-          type: 'resource',
-          id: nodeId,
-          status: 'active',
-          caption,
-        });
-        activeOrder.push({ time, id: nodeId });
-
-        for (const connection of outMap.get(nodeId) || []) {
-          keyframes.push({ time: time + ROUTE_ON, type: 'route', id: `route-${connection.id}`, active: true });
-          keyframes.push({ time: time + ROUTE_OFF, type: 'route', id: `route-${connection.id}`, active: false });
-        }
-
-        time += NODE_DURATION;
-      }
-    }
-
-    for (let i = 1; i < activeOrder.length; i++) {
-      keyframes.push({
-        time: activeOrder[i].time,
-        type: 'resource',
-        id: activeOrder[i - 1].id,
-        status: 'complete',
-      });
-    }
-
-    keyframes.sort((a, b) => a.time - b.time);
-    return { duration: time + 2, keyframes };
   }
 
   // =========================================================================

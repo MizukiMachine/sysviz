@@ -3,7 +3,6 @@ import { MessageCircle, Settings, Trash2, X } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { SettingsDialog } from './SettingsDialog';
-import type { PlaybackInfo } from '@/hooks/usePlayback';
 import type { ViewConfig } from '@/types/visualization';
 import type { LLMSettings } from '@/lib/llm/SettingsService';
 import type { GitLabSettings } from '@/lib/gitlab/GitLabSettings';
@@ -15,7 +14,6 @@ const DEFAULT_WIDTH = 420;
 const WIDTH_KEY = 'sysviz-chat-width';
 
 interface ChatPanelProps {
-  playbackInfo: PlaybackInfo;
   viewConfig: ViewConfig | null;
   rawMmdText: string;
   onClose: () => void;
@@ -31,8 +29,7 @@ interface ChatPanelProps {
   onUpdateGitLabSettings: (settings: GitLabSettings) => void;
 }
 
-// Suggestion pools by context
-const IDLE_SUGGESTIONS = [
+const SUGGESTIONS = [
   'この可視化について教えて',
   '全体の流れを説明して',
   'ノードの形状の意味は？',
@@ -41,28 +38,10 @@ const IDLE_SUGGESTIONS = [
   'システムの入力と出力は？',
   'このシステムの目的は？',
   'フェーズごとに教えて',
-];
-
-const PLAYING_SUGGESTIONS = [
-  'このステップを詳しく説明して',
-  '次に何が起きる？',
-  'なぜこのノードが重要？',
-  'ここでのデータの変化は？',
-  '前のステップとどう違う？',
-  'このノードの役割は？',
-  'この後どうなるの？',
-  'ここでエラーが起きたら？',
-];
-
-const POST_ANSWER_SUGGESTIONS = [
   'もっと詳しく説明して',
   '別の言い方で説明して',
   '具体例を教えて',
   '図のどの部分が関係してる？',
-  '次は何を知るべき？',
-  '他に気をつける点は？',
-  'よくある失敗は何？',
-  '実運用での注意点は？',
 ];
 
 function pickRandom(arr: string[], count: number): string[] {
@@ -70,19 +49,11 @@ function pickRandom(arr: string[], count: number): string[] {
   return shuffled.slice(0, count);
 }
 
-function getSuggestions(playbackInfo: PlaybackInfo, messages: ChatMessageType[]): string[] {
-  const hasHistory = messages.length > 0;
-  if (hasHistory) {
-    return pickRandom(POST_ANSWER_SUGGESTIONS, 4);
-  }
-  if (playbackInfo.state === 'idle' && playbackInfo.currentStep < 0) {
-    return pickRandom(IDLE_SUGGESTIONS, 4);
-  }
-  return pickRandom(PLAYING_SUGGESTIONS, 4);
+function getSuggestions(messages: ChatMessageType[]): string[] {
+  return pickRandom(SUGGESTIONS, 4);
 }
 
 export function ChatPanel({
-  playbackInfo,
   viewConfig,
   rawMmdText,
   onClose,
@@ -142,7 +113,7 @@ export function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const suggestions = getSuggestions(playbackInfo, messages);
+  const suggestions = getSuggestions(messages);
 
   return (
     <>
@@ -161,9 +132,7 @@ export function ChatPanel({
           <div>
             <h2 className="text-lg font-semibold text-slate-800">SysViz AI</h2>
             <p className="text-sm text-slate-500 mt-0.5">
-              {playbackInfo.activeNodeId
-                ? `Analyzing: ${playbackInfo.activeNodeId}`
-                : 'Ready to answer questions'}
+              Ready to answer questions
             </p>
           </div>
           <div className="flex items-center gap-1.5">
@@ -200,7 +169,7 @@ export function ChatPanel({
               </div>
               <p className="text-lg font-medium text-slate-600 mb-1">SysViz AI</p>
               <p className="text-sm text-slate-400 max-w-[280px]">
-                可視化のステップについて質問してください。現在の再生状態をコンテキストに回答します。
+                可視化について質問してください。
               </p>
             </div>
           )}

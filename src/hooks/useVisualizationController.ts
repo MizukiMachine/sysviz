@@ -1,35 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_VIEW,
-  MERMAID_PATHS,
+  BUILTIN_PROJECTS,
   isGitLabView,
   resolveGitLabFilePath,
-  type VisualizationKey,
 } from '@/lib/views/viewRegistry';
 import type { Canvas3DHandle } from '@/components/Canvas3D';
 import type { ViewConfig } from '@/types/visualization';
-import { enrichCaptions } from '@/lib/llm/CaptionGenerator';
-import { loadSettings, getActiveConfig } from '@/lib/llm/SettingsService';
 import type { GitLabService } from '@/lib/gitlab/GitLabService';
 
 interface UseVisualizationControllerArgs {
   canvasRef: React.RefObject<Canvas3DHandle | null>;
-  initEngine: (renderer: NonNullable<Canvas3DHandle['renderer']>, timeline: ViewConfig['timeline']) => unknown;
-  stop: () => void;
   gitLabService?: GitLabService | null;
 }
 
 export function useVisualizationController({
   canvasRef,
-  initEngine,
-  stop,
   gitLabService,
 }: UseVisualizationControllerArgs) {
-  const [selectedView, setSelectedView] = useState<VisualizationKey>(DEFAULT_VIEW);
-  const [disabledOptions, setDisabledOptions] = useState<Set<VisualizationKey>>(new Set());
-  const [viewCache, setViewCache] = useState<Map<VisualizationKey, ViewConfig>>(new Map());
+  const [selectedProject, setSelectedProject] = useState<string>(BUILTIN_PROJECTS[0].id);
+  const [selectedDiagram, setSelectedDiagram] = useState<string>(BUILTIN_PROJECTS[0].diagrams[0].id);
+  const [disabledDiagrams, setDisabledDiagrams] = useState<Set<string>>(new Set());
+  const [viewCache, setViewCache] = useState<Map<string, ViewConfig>>(new Map());
   const [rawMmdText, setRawMmdText] = useState<string>('');
-  const [isEnriching, setIsEnriching] = useState(false);
   const [isLoadingView, setIsLoadingView] = useState(false);
   const initializedRef = useRef(false);
   const parseImportRef = useRef<Promise<typeof import('@/lib/three/parser/MermaidParser.js')> | null>(null);
@@ -41,54 +34,45 @@ export function useVisualizationController({
     return parseImportRef.current;
   }, []);
 
-  const fetchView = useCallback(async (viewKey: VisualizationKey, signal?: AbortSignal): Promise<ViewConfig> => {
+  const fetchView = useCallback(async (diagramId: string, signal?: AbortSignal): Promise<ViewConfig> => {
     const { MermaidParser } = await getParser();
     const parser = new MermaidParser();
-    const data = isGitLabView(viewKey)
-      ? await parser.parseText(
-          await (async () => {
-            if (!gitLabService) {
-              throw new Error('GitLab service is not available');
-            }
-            return gitLabService.fetchMmdFile(resolveGitLabFilePath(viewKey), signal);
-          })()
-        )
-      : await parser.parse(MERMAID_PATHS[viewKey]);
 
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    // Find the diagram entry across all projects and GitLab views
+    const allDiagrams = BUILTIN_PROJECTS.flatMap((p) => [...p.diagrams]);
+    const builtinDiagram = allDiagrams.find((d) => d.id === diagramId);
 
-    const settings = loadSettings();
-    const config = getActiveConfig(settings);
-    if (!config || !settings.captionEnrichment) return data;
-
-    setIsEnriching(true);
-    try {
-      const enriched = await enrichCaptions(data, config, signal);
-      if (!signal?.aborted) return enriched;
+    if (builtinDiagram && builtinDiagram.filePath) {
+      const data = await parser.parse(builtinDiagram.filePath);
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       return data;
-    } catch (e) {
-      console.warn('Caption enrichment failed, using template captions:', e);
-      return data;
-    } finally {
-      if (!signal?.aborted) setIsEnriching(false);
     }
+
+    if (isGitLabView(diagramId)) {
+      if (!gitLabService) throw new Error('GitLab service is not available');
+      return parser.parseText(await gitLabService.fetchMmdFile(resolveGitLabFilePath(diagramId), signal));
+    }
+
+    // Fallback: empty parse
+    return parser.parseText('');
   }, [getParser, gitLabService]);
 
-  // Initial fetch for DEFAULT_VIEW
+  // Initial fetch for default diagram
   useEffect(() => {
     const ac = new AbortController();
+    const defaultDiagramId = BUILTIN_PROJECTS[0].diagrams[0].id;
     setIsLoadingView(true);
-    fetchView(DEFAULT_VIEW, ac.signal)
+    fetchView(defaultDiagramId, ac.signal)
       .then((data) => {
         if (!ac.signal.aborted) {
-          setViewCache(new Map([[DEFAULT_VIEW, data]]));
+          setViewCache(new Map([[defaultDiagramId, data]]));
           setRawMmdText(data.rawMmdText ?? '');
         }
       })
       .catch((err) => {
         if (!ac.signal.aborted) {
           console.warn('Mermaid parse failed:', err);
-          setDisabledOptions(new Set([DEFAULT_VIEW]));
+          setDisabledDiagrams(new Set([defaultDiagramId]));
         }
       })
       .finally(() => {
@@ -98,23 +82,21 @@ export function useVisualizationController({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadView = useCallback(
-    (viewName: VisualizationKey) => {
+    (diagramId: string) => {
       const canvas = canvasRef.current;
       if (!canvas?.renderer) return;
-      const viewConfig = viewCache.get(viewName);
+      const viewConfig = viewCache.get(diagramId);
       if (!viewConfig) return;
 
-      stop();
       canvas.loadView(viewConfig);
-      initEngine(canvas.renderer, viewConfig.timeline);
     },
-    [canvasRef, initEngine, viewCache, stop]
+    [canvasRef, viewCache]
   );
 
   // Poll for renderer readiness, then do first loadView
   useEffect(() => {
     if (initializedRef.current) return;
-    const cached = viewCache.get(selectedView);
+    const cached = viewCache.get(selectedDiagram);
     if (!cached) return;
 
     let cancelled = false;
@@ -125,7 +107,7 @@ export function useVisualizationController({
       if (cancelled) return;
       if (canvasRef.current?.renderer) {
         initializedRef.current = true;
-        loadView(selectedView);
+        loadView(selectedDiagram);
         return;
       }
       attempts += 1;
@@ -134,7 +116,7 @@ export function useVisualizationController({
         return;
       }
       initializedRef.current = true;
-      loadView(selectedView);
+      loadView(selectedDiagram);
     };
 
     pollTimer = window.setTimeout(poll, 100);
@@ -142,58 +124,73 @@ export function useVisualizationController({
       cancelled = true;
       if (pollTimer !== null) window.clearTimeout(pollTimer);
     };
-  }, [canvasRef, loadView, selectedView, viewCache]);
+  }, [canvasRef, loadView, selectedDiagram, viewCache]);
 
-  // Handle view switching
+  // Handle diagram switching
   useEffect(() => {
     if (!initializedRef.current) return;
 
-    const cached = viewCache.get(selectedView);
+    const cached = viewCache.get(selectedDiagram);
     if (cached) {
-      loadView(selectedView);
+      loadView(selectedDiagram);
       setRawMmdText(cached.rawMmdText ?? '');
       return;
     }
 
     const ac = new AbortController();
     setIsLoadingView(true);
-    fetchView(selectedView, ac.signal)
+    fetchView(selectedDiagram, ac.signal)
       .then((data) => {
         if (!ac.signal.aborted) {
-          setViewCache((prev) => new Map(prev).set(selectedView, data));
+          setViewCache((prev) => new Map(prev).set(selectedDiagram, data));
           setRawMmdText(data.rawMmdText ?? '');
         }
       })
       .catch((err) => {
         if (!ac.signal.aborted) {
-          console.warn(`Failed to load view ${selectedView}:`, err);
-          setDisabledOptions((prev) => new Set(prev).add(selectedView));
+          console.warn(`Failed to load diagram ${selectedDiagram}:`, err);
+          setDisabledDiagrams((prev) => new Set(prev).add(selectedDiagram));
         }
       })
       .finally(() => {
         if (!ac.signal.aborted) setIsLoadingView(false);
       });
     return () => ac.abort();
-  }, [selectedView, viewCache, fetchView, loadView]);
+  }, [selectedDiagram, viewCache, fetchView, loadView]);
 
-  const handleViewChange = useCallback(
-    (viewName: VisualizationKey) => {
-      initializedRef.current = true;
-      stop();
-      setSelectedView(viewName);
+  const handleProjectChange = useCallback(
+    (projectId: string) => {
+      const project = BUILTIN_PROJECTS.find((p) => p.id === projectId);
+      if (project) {
+        setSelectedProject(projectId);
+        const firstDiagram = project.diagrams[0];
+        if (firstDiagram) {
+          initializedRef.current = true;
+          setSelectedDiagram(firstDiagram.id);
+        }
+      }
     },
-    [stop]
+    []
   );
 
-  const mermaidView = viewCache.get(selectedView) ?? null;
+  const handleDiagramChange = useCallback(
+    (diagramId: string) => {
+      initializedRef.current = true;
+      setSelectedDiagram(diagramId);
+    },
+    []
+  );
+
+  const mermaidView = viewCache.get(selectedDiagram) ?? null;
 
   return {
-    disabledOptions,
-    selectedView,
-    handleViewChange,
+    selectedProject,
+    selectedDiagram,
+    disabledDiagrams,
     mermaidView,
     rawMmdText,
-    isEnriching,
     isLoadingView,
+    handleProjectChange,
+    handleDiagramChange,
   };
 }

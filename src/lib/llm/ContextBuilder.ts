@@ -1,32 +1,17 @@
-import type { PlaybackInfo } from '@/hooks/usePlayback';
 import type { ViewConfig } from '@/types/visualization';
 import { VIEW_LABELS } from '@/lib/views/viewRegistry';
 import { buildPhaseDescriptionFromConfig } from './PhaseDescriptions';
 
 export function buildSystemPrompt(
   viewName: string,
-  playbackInfo: PlaybackInfo,
   viewConfig: ViewConfig | null = null,
   rawMmdText: string = '',
 ): string {
   const viewLabel = VIEW_LABELS[viewName as keyof typeof VIEW_LABELS] || viewName;
   const phaseDescs = buildPhaseDescriptionFromConfig(viewName, viewConfig);
 
-  const stepInfo =
-    playbackInfo.currentStep >= 0
-      ? `Step ${playbackInfo.currentStep + 1} / ${playbackInfo.totalSteps}`
-      : 'Not started';
-
-  const activeNode = playbackInfo.activeNodeId || 'none';
-  const caption = playbackInfo.currentCaption || '(no caption)';
-
   return `You are SysViz AI, an assistant embedded in a 3D system visualization viewer.
 Currently showing: "${viewLabel}"
-
-## Playback State
-- Status: ${playbackInfo.state} | Progress: ${stepInfo}
-- Active Node: ${activeNode}
-- Caption: "${caption}"
 
 ## Visualization Context
 ${phaseDescs}

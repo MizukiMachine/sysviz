@@ -102,30 +102,6 @@ export function SettingsDialog({
               />
             </div>
 
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  AI解説
-                </label>
-                <span className="text-xs text-slate-400">読み込み時にLLMでキャプションを生成</span>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={form.captionEnrichment}
-                onClick={() => setForm({ ...form, captionEnrichment: !form.captionEnrichment })}
-                className={`
-                  relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors
-                  ${form.captionEnrichment ? 'bg-blue-500' : 'bg-slate-300'}
-                `}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform
-                    ${form.captionEnrichment ? 'translate-x-5' : 'translate-x-0'}
-                  `}
-                />
-              </button>
-            </div>
           </section>
 
           <section>

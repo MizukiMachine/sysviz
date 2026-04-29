@@ -79,8 +79,6 @@ export class ClusterRenderer {
   _cameraTargetAnimation: CameraTargetAnimation | null;
   onSelect: ((resourceId: string | null) => void) | null;
   onHover: ((resourceId: string | null) => void) | null;
-  onAnimate: ((delta: number) => void) | null;
-  lockDrag: boolean;
   _onMouseMove!: (event: MouseEvent) => void;
   _onMouseDown!: (event: MouseEvent) => void;
   _onMouseUp!: (event: MouseEvent) => void;
@@ -103,8 +101,6 @@ export class ClusterRenderer {
     this._cameraTargetAnimation = null;
     this.onSelect = null;
     this.onHover = null;
-    this.onAnimate = null;
-    this.lockDrag = false;
     this.pickableObjects = [];
     this.meshFactory = new ResourceMeshFactory();
 
@@ -622,14 +618,10 @@ export class ClusterRenderer {
     const delta = (now - this.lastFrameTime) / 1000;
     this.lastFrameTime = now;
 
-    if (this.onAnimate) {
-      this.onAnimate(delta);
-    }
-
     this._updateCameraTargetAnimation(now);
     this.controls.update();
 
-    if (!this._didDrag && !this.lockDrag) {
+    if (!this._didDrag) {
       this._performPick(false);
     }
 

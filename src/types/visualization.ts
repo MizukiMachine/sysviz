@@ -65,31 +65,6 @@ export interface VisualizationRoute {
   active?: boolean;
 }
 
-export interface VisualizationResourceTimelineKeyframe {
-  time: number;
-  type: 'resource';
-  id: string;
-  status: VisualizationResourceStatus;
-  caption?: string;
-}
-
-export interface VisualizationRouteTimelineKeyframe {
-  time: number;
-  type: 'route';
-  id: string;
-  active: boolean;
-  caption?: string;
-}
-
-export type VisualizationTimelineKeyframe =
-  | VisualizationResourceTimelineKeyframe
-  | VisualizationRouteTimelineKeyframe;
-
-export interface VisualizationTimeline {
-  duration: number;
-  keyframes: VisualizationTimelineKeyframe[];
-}
-
 export interface VisualizationCamera {
   position: [number, number, number];
   target: [number, number, number];
@@ -135,7 +110,6 @@ export interface VisualizationSequenceParticipant {
 export interface ViewConfig {
   nodes: VisualizationNode[];
   connections: VisualizationConnection[];
-  timeline: VisualizationTimeline;
   buildRoutes: (meshes: Map<string, THREE.Group>) => VisualizationRoute[];
   camera: VisualizationCamera | null;
   subgraphs: Map<string, VisualizationSubgraph>;

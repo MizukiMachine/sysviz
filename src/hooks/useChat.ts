@@ -2,7 +2,6 @@ import { useState, useCallback, useRef } from 'react';
 import { streamChat, type LLMConfig } from '@/lib/llm/LLMService';
 import { loadSettings, saveSettings, getActiveConfig, type LLMSettings } from '@/lib/llm/SettingsService';
 import { buildSystemPrompt } from '@/lib/llm/ContextBuilder';
-import type { PlaybackInfo } from './usePlayback';
 import type { ViewConfig } from '@/types/visualization';
 
 export interface ChatMessage {
@@ -35,7 +34,6 @@ export function useChat() {
   const sendMessage = useCallback(
     async (
       text: string,
-      playbackInfo: PlaybackInfo,
       viewName: string,
       viewConfig: ViewConfig | null = null,
       rawMmdText: string = '',
@@ -64,7 +62,7 @@ export function useChat() {
       setIsLoading(true);
       setError(null);
 
-      const systemPrompt = buildSystemPrompt(viewName, playbackInfo, viewConfig, rawMmdText);
+      const systemPrompt = buildSystemPrompt(viewName, viewConfig, rawMmdText);
       const history = [...messages, userMsg].map((m) => ({
         role: m.role,
         content: m.content,
