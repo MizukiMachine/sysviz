@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  DEFAULT_VIEW,
   BUILTIN_PROJECTS,
   isGitLabView,
+  type Project,
   resolveGitLabFilePath,
 } from '@/lib/views/viewRegistry';
 import type { Canvas3DHandle } from '@/components/Canvas3D';
@@ -11,15 +11,19 @@ import type { GitLabService } from '@/lib/gitlab/GitLabService';
 
 interface UseVisualizationControllerArgs {
   canvasRef: React.RefObject<Canvas3DHandle | null>;
+  projects: readonly Project[];
   gitLabService?: GitLabService | null;
 }
 
 export function useVisualizationController({
   canvasRef,
+  projects,
   gitLabService,
 }: UseVisualizationControllerArgs) {
-  const [selectedProject, setSelectedProject] = useState<string>(BUILTIN_PROJECTS[0].id);
-  const [selectedDiagram, setSelectedDiagram] = useState<string>(BUILTIN_PROJECTS[0].diagrams[0].id);
+  const fallbackProject = projects[0] ?? BUILTIN_PROJECTS[0];
+  const fallbackDiagram = fallbackProject?.diagrams[0] ?? BUILTIN_PROJECTS[0].diagrams[0];
+  const [selectedProject, setSelectedProject] = useState<string>(fallbackProject.id);
+  const [selectedDiagram, setSelectedDiagram] = useState<string>(fallbackDiagram.id);
   const [disabledDiagrams, setDisabledDiagrams] = useState<Set<string>>(new Set());
   const [viewCache, setViewCache] = useState<Map<string, ViewConfig>>(new Map());
   const [rawMmdText, setRawMmdText] = useState<string>('');
@@ -34,16 +38,30 @@ export function useVisualizationController({
     return parseImportRef.current;
   }, []);
 
+  const findProject = useCallback(
+    (projectId: string) => projects.find((project) => project.id === projectId) ?? null,
+    [projects]
+  );
+
+  const findDiagram = useCallback(
+    (diagramId: string) => {
+      for (const project of projects) {
+        const diagram = project.diagrams.find((entry) => entry.id === diagramId);
+        if (diagram) return diagram;
+      }
+      return null;
+    },
+    [projects]
+  );
+
   const fetchView = useCallback(async (diagramId: string, signal?: AbortSignal): Promise<ViewConfig> => {
     const { MermaidParser } = await getParser();
     const parser = new MermaidParser();
 
-    // Find the diagram entry across all projects and GitLab views
-    const allDiagrams = BUILTIN_PROJECTS.flatMap((p) => [...p.diagrams]);
-    const builtinDiagram = allDiagrams.find((d) => d.id === diagramId);
+    const diagram = findDiagram(diagramId);
 
-    if (builtinDiagram && builtinDiagram.filePath) {
-      const data = await parser.parse(builtinDiagram.filePath);
+    if (diagram?.filePath && !isGitLabView(diagramId)) {
+      const data = await parser.parse(diagram.filePath);
       if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       return data;
     }
@@ -55,12 +73,12 @@ export function useVisualizationController({
 
     // Fallback: empty parse
     return parser.parseText('');
-  }, [getParser, gitLabService]);
+  }, [findDiagram, getParser, gitLabService]);
 
   // Initial fetch for default diagram
   useEffect(() => {
     const ac = new AbortController();
-    const defaultDiagramId = BUILTIN_PROJECTS[0].diagrams[0].id;
+    const defaultDiagramId = fallbackDiagram.id;
     setIsLoadingView(true);
     fetchView(defaultDiagramId, ac.signal)
       .then((data) => {
@@ -79,7 +97,7 @@ export function useVisualizationController({
         if (!ac.signal.aborted) setIsLoadingView(false);
       });
     return () => ac.abort();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fallbackDiagram.id, fetchView]);
 
   const loadView = useCallback(
     (diagramId: string) => {
@@ -158,27 +176,52 @@ export function useVisualizationController({
     return () => ac.abort();
   }, [selectedDiagram, viewCache, fetchView, loadView]);
 
+  useEffect(() => {
+    const project = findProject(selectedProject);
+    if (!project) {
+      if (fallbackProject) {
+        setSelectedProject(fallbackProject.id);
+        const nextDiagram = fallbackProject.diagrams[0];
+        if (nextDiagram) {
+          setSelectedDiagram(nextDiagram.id);
+        }
+      }
+      return;
+    }
+
+    const hasSelectedDiagram = project.diagrams.some((diagram) => diagram.id === selectedDiagram);
+    if (!hasSelectedDiagram) {
+      const nextDiagram = project.diagrams.find((diagram) => !disabledDiagrams.has(diagram.id))
+        ?? project.diagrams[0];
+      if (nextDiagram) {
+        setSelectedDiagram(nextDiagram.id);
+      }
+    }
+  }, [disabledDiagrams, fallbackProject, findProject, selectedDiagram, selectedProject]);
+
   const handleProjectChange = useCallback(
     (projectId: string) => {
-      const project = BUILTIN_PROJECTS.find((p) => p.id === projectId);
+      const project = findProject(projectId);
       if (project) {
         setSelectedProject(projectId);
-        const firstDiagram = project.diagrams[0];
-        if (firstDiagram) {
+        const nextDiagram = project.diagrams.find((diagram) => !disabledDiagrams.has(diagram.id))
+          ?? project.diagrams[0];
+        if (nextDiagram) {
           initializedRef.current = true;
-          setSelectedDiagram(firstDiagram.id);
+          setSelectedDiagram(nextDiagram.id);
         }
       }
     },
-    []
+    [disabledDiagrams, findProject]
   );
 
   const handleDiagramChange = useCallback(
     (diagramId: string) => {
+      if (disabledDiagrams.has(diagramId)) return;
       initializedRef.current = true;
       setSelectedDiagram(diagramId);
     },
-    []
+    [disabledDiagrams]
   );
 
   const mermaidView = viewCache.get(selectedDiagram) ?? null;

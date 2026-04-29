@@ -1,6 +1,7 @@
-import { BUILTIN_PROJECTS, type DiagramEntry } from '@/lib/views/viewRegistry';
+import type { DiagramEntry, Project } from '@/lib/views/viewRegistry';
 
 interface DiagramSwitcherProps {
+  projects: readonly Project[];
   projectId: string;
   value: string;
   onChange: (diagramId: string) => void;
@@ -8,12 +9,13 @@ interface DiagramSwitcherProps {
 }
 
 export function DiagramSwitcher({
+  projects,
   projectId,
   value,
   onChange,
   disabledOptions,
 }: DiagramSwitcherProps) {
-  const project = BUILTIN_PROJECTS.find((p) => p.id === projectId);
+  const project = projects.find((p) => p.id === projectId);
   const diagrams: readonly DiagramEntry[] = project?.diagrams ?? [];
 
   if (diagrams.length === 0) return null;

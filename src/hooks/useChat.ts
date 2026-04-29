@@ -18,6 +18,15 @@ export function useChat() {
   const [settings, setSettings] = useState<LLMSettings>(loadSettings);
   const abortRef = useRef<AbortController | null>(null);
   const msgIdRef = useRef(0);
+  const messagesRef = useRef<ChatMessage[]>([]);
+
+  const updateMessages = useCallback((updater: (prev: ChatMessage[]) => ChatMessage[]) => {
+    setMessages((prev) => {
+      const next = updater(prev);
+      messagesRef.current = next;
+      return next;
+    });
+  }, []);
 
   const updateSettings = useCallback((newSettings: LLMSettings) => {
     setSettings(newSettings);
@@ -26,6 +35,7 @@ export function useChat() {
 
   const clearChat = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
+    messagesRef.current = [];
     setMessages([]);
     setError(null);
     setIsLoading(false);
@@ -44,6 +54,9 @@ export function useChat() {
         return;
       }
 
+      abortRef.current?.abort();
+      const previousMessages = messagesRef.current;
+
       const userMsg: ChatMessage = {
         id: `msg-${++msgIdRef.current}`,
         role: 'user',
@@ -58,12 +71,12 @@ export function useChat() {
         timestamp: Date.now(),
       };
 
-      setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      updateMessages((prev) => [...prev, userMsg, assistantMsg]);
       setIsLoading(true);
       setError(null);
 
       const systemPrompt = buildSystemPrompt(viewName, viewConfig, rawMmdText);
-      const history = [...messages, userMsg].map((m) => ({
+      const history = [...previousMessages, userMsg].map((m) => ({
         role: m.role,
         content: m.content,
       }));
@@ -71,34 +84,45 @@ export function useChat() {
       const abortController = new AbortController();
       abortRef.current = abortController;
 
-      await streamChat(
-        config as LLMConfig,
-        history,
-        systemPrompt,
-        {
-          onToken: (token) => {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantMsg.id
-                  ? { ...m, content: m.content + token }
-                  : m
-              )
-            );
+      try {
+        await streamChat(
+          config as LLMConfig,
+          history,
+          systemPrompt,
+          {
+            onToken: (token) => {
+              updateMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsg.id
+                    ? { ...m, content: m.content + token }
+                    : m
+                )
+              );
+            },
+            onDone: () => {
+              setIsLoading(false);
+              abortRef.current = null;
+            },
+            onError: (err) => {
+              setError(err);
+              setIsLoading(false);
+              abortRef.current = null;
+            },
           },
-          onDone: () => {
-            setIsLoading(false);
-            abortRef.current = null;
-          },
-          onError: (err) => {
-            setError(err);
-            setIsLoading(false);
-            abortRef.current = null;
-          },
-        },
-        abortController.signal
-      );
+          abortController.signal
+        );
+      } catch (err) {
+        if (abortController.signal.aborted) {
+          setIsLoading(false);
+          return;
+        }
+        const message = err instanceof Error ? err.message : 'チャットの送信に失敗しました。';
+        setError(message);
+        setIsLoading(false);
+        abortRef.current = null;
+      }
     },
-    [messages, settings]
+    [settings, updateMessages]
   );
 
   const stopStreaming = useCallback(() => {

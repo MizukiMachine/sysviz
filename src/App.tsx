@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useMemo, useRef, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Canvas3D, type Canvas3DHandle } from './components/Canvas3D';
 import { ProjectSelector } from './components/ProjectSelector';
 import { DiagramSwitcher } from './components/DiagramSwitcher';
 import { useChat } from './hooks/useChat';
 import { useVisualizationController } from './hooks/useVisualizationController';
-import { BUILTIN_PROJECTS } from './lib/views/viewRegistry';
+import { BUILTIN_PROJECTS, createGitLabProject } from './lib/views/viewRegistry';
 import { useGitLab } from './hooks/useGitLab';
 
 const ChatPanel = lazy(() =>
@@ -18,19 +18,9 @@ export default function App() {
   const chat = useChat();
   const gitLab = useGitLab();
 
-  // Convert GitLab views to extra projects for ProjectSelector
   const gitLabProjects = useMemo(() =>
-    gitLab.views.map((view) => ({
-      id: view.value,
-      label: view.label,
-      diagrams: [{
-        id: view.value,
-        label: view.label,
-        filePath: view.filePath,
-        diagramType: view.diagramType,
-      }],
-    })),
-    [gitLab.views]
+    gitLab.manifest?.diagrams.map((diagram) => createGitLabProject(diagram)) ?? [],
+    [gitLab.manifest]
   );
 
   const allProjects = useMemo(
@@ -49,16 +39,9 @@ export default function App() {
     isLoadingView,
   } = useVisualizationController({
     canvasRef,
+    projects: allProjects,
     gitLabService: gitLab.configured ? gitLab.service : null,
   });
-
-  // If selected project no longer exists, reset to first available
-  useEffect(() => {
-    if (allProjects.some((p) => p.id === selectedProject)) return;
-    if (allProjects.length > 0) {
-      handleProjectChange(allProjects[0].id);
-    }
-  }, [allProjects, selectedProject, handleProjectChange]);
 
   return (
     <div className="relative w-full h-full overflow-hidden">
@@ -71,6 +54,7 @@ export default function App() {
       />
 
       <DiagramSwitcher
+        projects={allProjects}
         projectId={selectedProject}
         value={selectedDiagram}
         onChange={handleDiagramChange}
