@@ -11,6 +11,18 @@ export interface DiagramEntry {
   diagramType?: 'flowchart' | 'sequence';
 }
 
+export function deriveLabel(entry: DiagramEntry): string {
+  if (entry.label) return entry.label;
+  if (entry.filePath) {
+    const name = entry.filePath.split('/').pop()?.replace(/\.mmd$/i, '') ?? entry.id;
+    return name
+      .replace(/^\d+[_\-]/, '')
+      .replace(/[_\-]+/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return entry.id;
+}
+
 // ---------------------------------------------------------------------------
 // Project
 // ---------------------------------------------------------------------------

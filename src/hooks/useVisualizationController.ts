@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BUILTIN_PROJECTS,
+  deriveLabel,
   isGitLabView,
   type Project,
   resolveGitLabFilePath,
@@ -8,6 +9,7 @@ import {
 import type { Canvas3DHandle } from '@/components/Canvas3D';
 import type { ViewConfig } from '@/types/visualization';
 import type { GitLabService } from '@/lib/gitlab/GitLabService';
+import { translateLabels } from '@/lib/llm/LabelTranslator';
 
 interface UseVisualizationControllerArgs {
   canvasRef: React.RefObject<Canvas3DHandle | null>;
@@ -26,6 +28,8 @@ export function useVisualizationController({
   const [selectedDiagram, setSelectedDiagram] = useState<string>(fallbackDiagram.id);
   const [disabledDiagrams, setDisabledDiagrams] = useState<Set<string>>(new Set());
   const [viewCache, setViewCache] = useState<Map<string, ViewConfig>>(new Map());
+  const [labelTranslations, setLabelTranslations] = useState<Map<string, string>>(new Map());
+  const [translationError, setTranslationError] = useState<string | null>(null);
   const [rawMmdText, setRawMmdText] = useState<string>('');
   const [isLoadingView, setIsLoadingView] = useState(false);
   const initializedRef = useRef(false);
@@ -144,6 +148,28 @@ export function useVisualizationController({
     };
   }, [canvasRef, loadView, selectedDiagram, viewCache]);
 
+  // Translate diagram labels when project changes
+  useEffect(() => {
+    const project = findProject(selectedProject);
+    if (!project) return;
+
+    const labels = project.diagrams.map((d) => deriveLabel(d));
+    const ac = new AbortController();
+    setTranslationError(null);
+
+    translateLabels(labels, ac.signal).then((translations) => {
+      if (!ac.signal.aborted) {
+        setLabelTranslations(translations);
+      }
+    }).catch((err) => {
+      if (!ac.signal.aborted) {
+        setTranslationError(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+    return () => ac.abort();
+  }, [selectedProject]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Handle diagram switching
   useEffect(() => {
     if (!initializedRef.current) return;
@@ -226,10 +252,23 @@ export function useVisualizationController({
 
   const mermaidView = viewCache.get(selectedDiagram) ?? null;
 
+  const getLabel = useCallback(
+    (diagramId: string) => {
+      const project = findProject(selectedProject);
+      const diagram = project?.diagrams.find((d) => d.id === diagramId);
+      if (!diagram) return diagramId;
+      const base = deriveLabel(diagram);
+      return labelTranslations.get(base) ?? base;
+    },
+    [findProject, selectedProject, labelTranslations]
+  );
+
   return {
     selectedProject,
     selectedDiagram,
     disabledDiagrams,
+    getLabel,
+    translationError,
     mermaidView,
     rawMmdText,
     isLoadingView,

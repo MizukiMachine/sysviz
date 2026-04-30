@@ -32,6 +32,8 @@ export default function App() {
     selectedProject,
     selectedDiagram,
     disabledDiagrams,
+    getLabel,
+    translationError,
     handleProjectChange,
     handleDiagramChange,
     mermaidView,
@@ -59,6 +61,7 @@ export default function App() {
         value={selectedDiagram}
         onChange={handleDiagramChange}
         disabledOptions={disabledDiagrams}
+        getLabel={getLabel}
       />
 
       {isLoadingView && (
