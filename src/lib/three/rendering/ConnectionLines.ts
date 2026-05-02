@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import type { ClusterBounds, VisualizationConnection, VisualizationPathPoint } from '@/types/visualization';
+import { MAX_CURVE_SEGMENTS, FLOWCHART_EDGE_Y } from './constants.js';
+import { buildConnectionCurve } from './curveUtils.js';
+import { createPillLabelTexture } from './labelUtils.js';
 
 const RELATIONSHIP_COLORS = {
   ownership: 0x8b949e,
@@ -34,12 +37,12 @@ const FLOW_SPEEDS = {
   default: 0.42,
 } as const;
 
-const CURVE_SEGMENTS = 48;
+const CURVE_SEGMENTS = MAX_CURVE_SEGMENTS;
 const MIN_OPACITY = 0.56;
 const MAX_OPACITY = 0.98;
 const IDLE_FLOW_MULTIPLIER = 1.0;
 const ACTIVE_FLOW_MULTIPLIER = 2.2;
-const FLOWCHART_PATH_Y = 0.16;
+const FLOWCHART_PATH_Y = FLOWCHART_EDGE_Y;
 const UNDERLAY_Y_OFFSET = -0.004;
 const UNDERLAY_OPACITY = 0.34;
 const HIGHLIGHT_UNDERLAY_OPACITY = 0.5;
@@ -297,46 +300,7 @@ export class ConnectionLineManager {
       return this.labelTextures.get(label) || null;
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 160;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = '600 32px "Inter", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const textWidth = Math.min(ctx.measureText(label).width + 44, canvas.width - 16);
-    const boxHeight = 72;
-    const boxX = (canvas.width - textWidth) / 2;
-    const boxY = (canvas.height - boxHeight) / 2;
-    const radius = 16;
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.beginPath();
-    ctx.moveTo(boxX + radius, boxY);
-    ctx.lineTo(boxX + textWidth - radius, boxY);
-    ctx.quadraticCurveTo(boxX + textWidth, boxY, boxX + textWidth, boxY + radius);
-    ctx.lineTo(boxX + textWidth, boxY + boxHeight - radius);
-    ctx.quadraticCurveTo(boxX + textWidth, boxY + boxHeight, boxX + textWidth - radius, boxY + boxHeight);
-    ctx.lineTo(boxX + radius, boxY + boxHeight);
-    ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
-    ctx.lineTo(boxX, boxY + radius);
-    ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = '#0f172a';
-    ctx.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 64);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.minFilter = THREE.LinearFilter;
+    const texture = createPillLabelTexture(label);
     this.labelTextures.set(label, texture);
     return texture;
   }
@@ -363,22 +327,7 @@ export class ConnectionLineManager {
     sourcePos: THREE.Vector3,
     targetPos: THREE.Vector3,
   ): THREE.Curve<THREE.Vector3> {
-    if (connection.pathPoints && connection.pathPoints.length >= 2) {
-      const liftedPoints = this._liftPathPoints(connection.pathPoints);
-      if (liftedPoints.length === 2) {
-        return new THREE.LineCurve3(liftedPoints[0], liftedPoints[1]);
-      }
-      return new THREE.CatmullRomCurve3(liftedPoints, false, 'centripetal');
-    }
-
-    const midpoint = new THREE.Vector3().lerpVectors(sourcePos, targetPos, 0.5);
-    const distance = sourcePos.distanceTo(targetPos);
-    midpoint.y += Math.min(distance * 0.3, 3);
-    return new THREE.QuadraticBezierCurve3(sourcePos, midpoint, targetPos);
-  }
-
-  private _liftPathPoints(points: VisualizationPathPoint[]): THREE.Vector3[] {
-    return points.map((point) => new THREE.Vector3(point.x, FLOWCHART_PATH_Y, point.z));
+    return buildConnectionCurve(sourcePos, targetPos, connection.pathPoints);
   }
 
   private _resolveEndpointPosition(

@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import type { ClusterBounds, VisualizationSubgraph } from '@/types/visualization';
+import { DEFAULT_HALF_HEIGHT, BORDER_COLOR as BORDER_CLR } from './constants.js';
+import { normalizeLabelText, roundRect } from './labelUtils.js';
+import { createCanvasTexture } from './threeUtils.js';
 
 const FLOOR_COLOR = 0xf0f4f8;
 const FLOOR_OPACITY = 0.3;
-const BORDER_COLOR = 0x94a3b8;
 const BORDER_OPACITY = 0.5;
 const FALLBACK_PADDING = 0.8;
 const LABEL_MIN_HEIGHT = 1.28;
@@ -23,11 +25,7 @@ interface DisposableObject3D extends THREE.Object3D {
 }
 
 function getLabelLines(text: string): string[] {
-  const lines = text
-    .split(/<br\s*\/?>/i)
-    .map((line) => line.replace(/<[^>]+>/g, '').trim())
-    .filter(Boolean);
-  return lines.length > 0 ? lines : [text.replace(/<[^>]+>/g, '').trim()];
+  return normalizeLabelText(text);
 }
 
 function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTexture {
@@ -77,27 +75,6 @@ function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTe
   const texture = new THREE.CanvasTexture(canvas);
   texture.minFilter = THREE.LinearFilter;
   return texture;
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
 }
 
 export class SubgraphRenderer {
@@ -175,7 +152,7 @@ export class SubgraphRenderer {
       for (const nodeId of members) {
         const mesh = resourceMeshes.get(nodeId);
         if (!mesh) continue;
-        const halfHeight = Number((mesh.userData as { halfHeight?: number }).halfHeight ?? 0.65);
+        const halfHeight = Number((mesh.userData as { halfHeight?: number }).halfHeight ?? DEFAULT_HALF_HEIGHT);
         topY = Math.max(topY, mesh.position.y + halfHeight);
       }
 
@@ -199,7 +176,7 @@ export class SubgraphRenderer {
         // Border outline (底面の枠線)
         const borderGeo = new THREE.EdgesGeometry(floorGeo);
         const borderMat = new THREE.LineBasicMaterial({
-          color: BORDER_COLOR,
+          color: BORDER_CLR,
           transparent: true,
           opacity: BORDER_OPACITY,
         });

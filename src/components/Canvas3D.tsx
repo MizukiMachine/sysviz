@@ -85,28 +85,6 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
     };
   }, []);
 
-  const clearScene = useCallback(() => {
-    const renderer = rendererRef.current;
-    const sg = subgraphRef.current;
-    const flat = flatDiagramRef.current;
-    const sequenceParticipants = sequenceParticipantRef.current;
-    if (!renderer || !sg || !flat || !sequenceParticipants) return;
-
-    for (const id of [...renderer.resourceMeshes.keys()]) {
-      renderer.removeResource(id);
-    }
-    for (const id of [...renderer.connectionLines.connections.keys()]) {
-      renderer.connectionLines.removeConnection(id);
-    }
-    for (const id of [...renderer.particleTraffic.routes.keys()]) {
-      renderer.particleTraffic.removeRoute(id);
-    }
-    renderer.clusterBounds = undefined;
-    sg.clear();
-    flat.clear();
-    sequenceParticipants.clear();
-  }, []);
-
   const clearOverlays = useCallback(() => {
     const renderer = rendererRef.current;
     const sg = subgraphRef.current;
@@ -126,6 +104,11 @@ export const Canvas3D = forwardRef<Canvas3DHandle>((_, ref) => {
     sg.clear();
     sequenceParticipants.clear();
   }, []);
+
+  const clearScene = useCallback(() => {
+    clearOverlays();
+    flatDiagramRef.current?.clear();
+  }, [clearOverlays]);
 
   const loadView = useCallback(
     async (view: ViewConfig) => {

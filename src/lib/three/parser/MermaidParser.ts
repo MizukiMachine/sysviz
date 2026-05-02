@@ -14,6 +14,21 @@ import type {
   VisualizationFlatDiagram,
   VisualizationPathPoint,
 } from '@/types/visualization';
+import {
+  CAMERA_FOV,
+  CAMERA_ELEVATION_DEG,
+  CAMERA_Y_OFFSET,
+  DEFAULT_NODE_WIDTH,
+  DEFAULT_NODE_HEIGHT,
+  DEFAULT_NODE_COLOR,
+  DEFAULT_HALF_HEIGHT,
+  FLOWCHART_EDGE_Y,
+  CLUSTER_NODE_MARGIN_X,
+  CLUSTER_NODE_MARGIN_Z,
+  CAMERA_BOUNDS_PADDING,
+  CAMERA_MIN_SPAN,
+} from '../rendering/constants.js';
+import { calculateCameraView, computeBoundingBox } from '../rendering/cameraUtils.js';
 
 // ---------------------------------------------------------------------------
 // Shape / tag / label maps (unchanged)
@@ -75,9 +90,6 @@ const SVG_TRANSLATE_RE = new RegExp(
   'i',
 );
 
-const CLUSTER_NODE_MARGIN_X = 2.0;
-const CLUSTER_NODE_MARGIN_Z = 1.2;
-const FLOWCHART_FLOATING_EDGE_Y = 0.16;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -693,7 +705,7 @@ export class MermaidParser {
         type,
         shape,
         status: 'idle',
-        color: 0xe2e8f0,
+        color: DEFAULT_NODE_COLOR,
         x: 0,
         y: 0,
         z: 0,
@@ -1394,8 +1406,8 @@ export class MermaidParser {
         if (svgPos?.height && svgPos.height > 0) {
           node.renderHeight = Math.max(0.8, svgPos.height * scale);
         }
-        const renderWidth = node.renderWidth ?? 2.8;
-        const renderHeight = node.renderHeight ?? 1.3;
+        const renderWidth = node.renderWidth ?? DEFAULT_NODE_WIDTH;
+        const renderHeight = node.renderHeight ?? DEFAULT_NODE_HEIGHT;
         node.renderDepth = Math.max(renderHeight, Math.min(renderWidth * 0.92, renderHeight * 1.15));
       }
     }
@@ -1809,38 +1821,9 @@ export class MermaidParser {
     if (nodes.length === 0) {
       return { position: [18, 3, 14], target: [0, 0, 0] };
     }
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    for (const node of nodes) {
-      minX = Math.min(minX, node.x);
-      maxX = Math.max(maxX, node.x);
-      minZ = Math.min(minZ, node.z);
-      maxZ = Math.max(maxZ, node.z);
-    }
-    const cx = (minX + maxX) / 2;
-    const cz = (minZ + maxZ) / 2;
-    const spreadX = maxX - minX;
-    const spreadZ = maxZ - minZ;
-
-    const FOV_DEG = 45;
-    const halfFovRad = (FOV_DEG / 2) * (Math.PI / 180);
-    const tanHalf = Math.tan(halfFovRad);
-    const PADDED_X = Math.max(spreadX + 3, 7);
-    const PADDED_Z = Math.max(spreadZ + 3, 7);
-    const distForX = (PADDED_X / 1.5) / tanHalf;
-    const distForZ = PADDED_Z / tanHalf;
-    const dist = Math.max(distForX, distForZ, 9);
-
-    const ELEVATION_ANGLE = 35 * (Math.PI / 180);
-    const camY = dist * Math.sin(ELEVATION_ANGLE) + 2;
-    const camOffsetZ = dist * Math.cos(ELEVATION_ANGLE);
-
-    return {
-      position: [cx, camY, cz + camOffsetZ],
-      target: [cx, 0, cz],
-    };
+    const { minX, maxX, minZ, maxZ } = computeBoundingBox(nodes);
+    // Use 1.5 as default aspect (matches the original hardcoded value)
+    return calculateCameraView({ minX, maxX, minZ, maxZ }, 1.5);
   }
 
   // =========================================================================
@@ -1870,7 +1853,7 @@ export class MermaidParser {
           targetPos: tgtMesh.position.clone(),
           pathPoints: conn.pathPoints?.map((point) => ({
             x: point.x,
-            y: FLOWCHART_FLOATING_EDGE_Y,
+            y: FLOWCHART_EDGE_Y,
             z: point.z,
           })),
           payload: conn._label || nodeMap.get(conn.sourceId)?.dataOut || '',

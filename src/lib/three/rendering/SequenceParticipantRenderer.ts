@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { VisualizationSequenceParticipant } from '@/types/visualization';
+import { normalizeLabelText } from './labelUtils.js';
 
 const BODY_COLOR = 0xb8daf3;
 const EDGE_COLOR = 0x7fb4da;
@@ -13,12 +14,7 @@ interface Entry {
 }
 
 function normalizeLines(text: string): string[] {
-  return text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  return normalizeLabelText(text);
 }
 
 function createLabelTexture(
