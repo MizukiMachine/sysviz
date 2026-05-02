@@ -51,6 +51,12 @@ export const RENDER_ORDER = {
   PARTICLE_LABEL: 12,
 } as const;
 
+// ── Plane rotation ────────────────────────────────────────────────────────
+export const FLAT_ROTATION_X = -Math.PI / 2;
+
+// ── Canvas dimensions ─────────────────────────────────────────────────────
+export const DEFAULT_CANVAS_WIDTH = 1024;
+
 // ── Label / font ─────────────────────────────────────────────────────────
 export const LABEL_FONT_FAMILY = '"Inter", sans-serif';
 

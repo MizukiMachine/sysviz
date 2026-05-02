@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ClusterBounds, VisualizationSubgraph } from '@/types/visualization';
-import { DEFAULT_HALF_HEIGHT, BORDER_COLOR as BORDER_CLR, RENDER_ORDER, LABEL_FONT_FAMILY } from './constants.js';
+import { DEFAULT_HALF_HEIGHT, BORDER_COLOR as BORDER_CLR, RENDER_ORDER, LABEL_FONT_FAMILY, FLAT_ROTATION_X } from './constants.js';
 import { normalizeLabelText, roundRect } from './labelUtils.js';
 import { createCanvasTexture } from './threeUtils.js';
 
@@ -168,7 +168,7 @@ export class SubgraphRenderer {
           side: THREE.DoubleSide,
         });
         const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-        floorMesh.rotation.x = -Math.PI / 2;
+        floorMesh.rotation.x = FLAT_ROTATION_X;
         floorMesh.position.set(cx, 0.01, cz);
         sgGroup.add(floorMesh);
 
@@ -180,7 +180,7 @@ export class SubgraphRenderer {
           opacity: BORDER_OPACITY,
         });
         const border = new THREE.LineSegments(borderGeo, borderMat);
-        border.rotation.x = -Math.PI / 2;
+        border.rotation.x = FLAT_ROTATION_X;
         border.position.set(cx, 0.01, cz);
         sgGroup.add(border);
       }
@@ -224,7 +224,7 @@ export class SubgraphRenderer {
       const topLabelPlane = new THREE.Mesh(labelGeo.clone(), labelMat.clone());
       const topLabelMaterial = topLabelPlane.material as THREE.MeshBasicMaterial;
       topLabelMaterial.map = floorTex;
-      topLabelPlane.rotation.x = -Math.PI / 2;
+      topLabelPlane.rotation.x = FLAT_ROTATION_X;
       topLabelPlane.position.set(
         labelX,
         labelY + TOP_LABEL_Y_OFFSET,

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { VisualizationSequenceParticipant } from '@/types/visualization';
-import { RENDER_ORDER, LABEL_FONT_FAMILY } from './constants.js';
+import { RENDER_ORDER, LABEL_FONT_FAMILY, FLAT_ROTATION_X } from './constants.js';
 import { normalizeLabelText } from './labelUtils.js';
 import { createCanvasTexture } from './threeUtils.js';
 
@@ -105,7 +105,7 @@ export class SequenceParticipantRenderer {
           side: THREE.DoubleSide,
         }),
       );
-      topLabel.rotation.x = -Math.PI / 2;
+      topLabel.rotation.x = FLAT_ROTATION_X;
       topLabel.position.set(participant.x, participant.height + 0.03, participant.z);
       topLabel.renderOrder = RENDER_ORDER.NODE_LABEL;
       group.add(topLabel);

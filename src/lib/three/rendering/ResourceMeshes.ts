@@ -11,6 +11,7 @@ import {
   RENDER_ORDER,
   LABEL_FONT_FAMILY,
   STATUS_COLORS,
+  FLAT_ROTATION_X,
 } from './constants.js';
 import { disposeObject3D, createCanvasTexture } from './threeUtils.js';
 import { normalizeLabelText } from './labelUtils.js';
@@ -228,7 +229,7 @@ function addBoxLabels(group: ResourceGroup, resource: VisualizationNode, width: 
     maxTextWidth: 1590,
     scale: { x: width * 0.995, y: depth * 0.97, z: 1 },
   });
-  topLabel.rotation.x = -Math.PI / 2;
+  topLabel.rotation.x = FLAT_ROTATION_X;
   topLabel.position.set(0, height / 2 + LABEL_SURFACE_OFFSET, 0);
   group.add(topLabel);
 

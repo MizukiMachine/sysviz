@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { VisualizationFlatDiagram } from '@/types/visualization';
 import { disposeObject3D } from './threeUtils';
+import { FLAT_ROTATION_X } from './constants.js';
 
 const BASE_Y = 0.02;
 
@@ -47,7 +48,7 @@ export class FlatDiagramRenderer {
         depthWrite: false,
       }),
     );
-    plane.rotation.x = -Math.PI / 2;
+    plane.rotation.x = FLAT_ROTATION_X;
     plane.position.set(
       (diagram.bounds.minX + diagram.bounds.maxX) / 2,
       BASE_Y,
