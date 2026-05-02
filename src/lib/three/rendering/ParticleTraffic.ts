@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import type { VisualizationRoute } from '@/types/visualization';
+import { RENDER_ORDER, TRAFFIC_COLORS as TRAFFIC_COLORS_HEX } from './constants.js';
+import { buildConnectionCurve } from './curveUtils.js';
+import { createPillLabelTexture } from './labelUtils.js';
 
 const POOL_SIZE = 512;
 const PARTICLE_BASE_SIZE = 5.0;
@@ -12,10 +15,10 @@ const FADE_OUT_START = 0.85;
 const PARTICLE_LABEL_SCALE = { x: 3.0, y: 0.75, z: 1 };
 
 const TRAFFIC_COLORS = {
-  healthy: new THREE.Color(0x3fb950),
-  error: new THREE.Color(0xf85149),
-  slow: new THREE.Color(0xd29922),
-  default: new THREE.Color(0x60a5fa),
+  healthy: new THREE.Color(TRAFFIC_COLORS_HEX.healthy),
+  error: new THREE.Color(TRAFFIC_COLORS_HEX.error),
+  slow: new THREE.Color(TRAFFIC_COLORS_HEX.slow),
+  default: new THREE.Color(TRAFFIC_COLORS_HEX.default),
 } as const;
 
 const vertexShader = `
@@ -203,7 +206,7 @@ export class ParticleTrafficSystem {
         opacity: 0,
       }));
       sprite.visible = false;
-      sprite.renderOrder = 12;
+      sprite.renderOrder = RENDER_ORDER.PARTICLE_LABEL;
       sprite.scale.set(PARTICLE_LABEL_SCALE.x, PARTICLE_LABEL_SCALE.y, PARTICLE_LABEL_SCALE.z);
       this.labelSprites[i] = sprite;
       this.scene.add(sprite);
@@ -217,45 +220,7 @@ export class ParticleTrafficSystem {
       return this.labelTextures.get(label) || null;
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 1024;
-    canvas.height = 160;
-    const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = '600 32px "Inter", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const textWidth = Math.min(ctx.measureText(label).width + 44, canvas.width - 16);
-    const boxHeight = 72;
-    const boxX = (canvas.width - textWidth) / 2;
-    const boxY = (canvas.height - boxHeight) / 2;
-    const radius = 16;
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-    ctx.beginPath();
-    ctx.moveTo(boxX + radius, boxY);
-    ctx.lineTo(boxX + textWidth - radius, boxY);
-    ctx.quadraticCurveTo(boxX + textWidth, boxY, boxX + textWidth, boxY + radius);
-    ctx.lineTo(boxX + textWidth, boxY + boxHeight - radius);
-    ctx.quadraticCurveTo(boxX + textWidth, boxY + boxHeight, boxX + textWidth - radius, boxY + boxHeight);
-    ctx.lineTo(boxX + radius, boxY + boxHeight);
-    ctx.quadraticCurveTo(boxX, boxY + boxHeight, boxX, boxY + boxHeight - radius);
-    ctx.lineTo(boxX, boxY + radius);
-    ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.fillStyle = '#0f172a';
-    ctx.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 64);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.minFilter = THREE.LinearFilter;
+    const texture = createPillLabelTexture(label);
     this.labelTextures.set(label, texture);
     return texture;
   }
@@ -350,26 +315,18 @@ export class ParticleTrafficSystem {
   }
 
   _buildCurve(route: Partial<TrafficRoute> & { curve?: THREE.Curve<THREE.Vector3> | null }): THREE.Curve<THREE.Vector3> | null {
-    if (route.pathPoints && route.pathPoints.length >= 2) {
-      const points = route.pathPoints.map((point) => this._toVector3(point));
-      if (points.length === 2) {
-        return new THREE.LineCurve3(points[0], points[1]);
-      }
-      return new THREE.CatmullRomCurve3(points, false, 'centripetal');
-    }
-
     if (!route.sourcePos || !route.targetPos) {
+      if (route.pathPoints && route.pathPoints.length >= 2) {
+        const start = this._toVector3(route.pathPoints[0]);
+        const end = this._toVector3(route.pathPoints[route.pathPoints.length - 1]);
+        return buildConnectionCurve(start, end, route.pathPoints);
+      }
       return route.curve || null;
     }
 
     const start = this._toVector3(route.sourcePos);
     const end = this._toVector3(route.targetPos);
-
-    const mid = new THREE.Vector3().lerpVectors(start, end, 0.5);
-    const dist = start.distanceTo(end);
-    mid.y += Math.min(dist * 0.3, 3);
-
-    return new THREE.QuadraticBezierCurve3(start, mid, end);
+    return buildConnectionCurve(start, end, route.pathPoints);
   }
 
   _acquireParticle(): { particle: Particle; index: number } | null {

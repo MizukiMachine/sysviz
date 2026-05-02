@@ -4,11 +4,27 @@ import { ResourceMeshFactory } from './ResourceMeshes.js';
 import { ConnectionLineManager } from './ConnectionLines.js';
 import { ParticleTrafficSystem } from './ParticleTraffic.js';
 import type { ClusterBounds, VisualizationCamera, VisualizationConnection, VisualizationNode, VisualizationRoute, VisualizationResourceStatus } from '@/types/visualization';
+import {
+  CAMERA_FOV,
+  CAMERA_FRAME_PADDING,
+  CAMERA_NEAR,
+  CAMERA_FAR,
+  CONTROLS_MIN_DISTANCE,
+  CONTROLS_MAX_DISTANCE,
+  BACKGROUND_COLOR as SCENE_BG,
+  FOG_COLOR,
+  FOG_DENSITY,
+  DEFAULT_HALF_HEIGHT,
+  CAMERA_BOUNDS_PADDING,
+  CAMERA_MIN_SPAN,
+  CLUSTER_HIGHLIGHT_COLOR,
+  CLUSTER_SELECT_COLOR,
+} from './constants.js';
+import { calculateFramingCamera, computeBoundingBox } from './cameraUtils.js';
+import { disposeObject3D } from './threeUtils.js';
 
-const BACKGROUND_COLOR = 0xfafafa;
-const HIGHLIGHT_COLOR = 0xbfdbfe;
-const SELECT_COLOR = 0xfbcfe8;
-const CAMERA_FRAME_PADDING = 1.10;
+const HIGHLIGHT_COLOR = CLUSTER_HIGHLIGHT_COLOR;
+const SELECT_COLOR = CLUSTER_SELECT_COLOR;
 const LABEL_FULL_DISTANCE = 18;
 const LABEL_SHORT_DISTANCE = 34;
 
@@ -118,13 +134,13 @@ export class ClusterRenderer {
 
   _initScene(): void {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(BACKGROUND_COLOR);
-    this.scene.fog = new THREE.FogExp2(0xffffff, 0.005);
+    this.scene.background = new THREE.Color(SCENE_BG);
+    this.scene.fog = new THREE.FogExp2(FOG_COLOR, FOG_DENSITY);
   }
 
   _initCamera(): void {
     const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
+    this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, aspect, CAMERA_NEAR, CAMERA_FAR);
     this.camera.position.set(2.5, 6, 14);
     this.camera.lookAt(2.5, 0, 0);
     this._initialCameraPosition.copy(this.camera.position);
@@ -155,8 +171,8 @@ export class ClusterRenderer {
     this.controls.rotateSpeed = 0.8;
     this.controls.zoomSpeed = 1.2;
     this.controls.panSpeed = 0.8;
-    this.controls.minDistance = 5;
-    this.controls.maxDistance = 80;
+    this.controls.minDistance = CONTROLS_MIN_DISTANCE;
+    this.controls.maxDistance = CONTROLS_MAX_DISTANCE;
     this.controls.maxPolarAngle = Math.PI / 2.1;
     this.controls.minPolarAngle = 0.1;
     this.controls.target.set(2.5, 0, 0);
@@ -398,7 +414,7 @@ export class ClusterRenderer {
     const userData = group.userData as ResourceUserData;
     userData.resourceId = resource.id;
     userData.resourceType = typeof resource.type === 'string' ? resource.type : undefined;
-    const halfHeight = (group.userData as ResourceUserData & { halfHeight?: number }).halfHeight ?? 0.65;
+    const halfHeight = (group.userData as ResourceUserData & { halfHeight?: number }).halfHeight ?? DEFAULT_HALF_HEIGHT;
     group.position.set(resource.x || 0, (resource.y || 0) + halfHeight, resource.z || 0);
 
     group.traverse((child) => {
@@ -432,16 +448,7 @@ export class ClusterRenderer {
     if (!group) return;
 
     this.scene.remove(group);
-    group.traverse((child) => {
-      const object = child as ResourceObject3D;
-      object.geometry?.dispose();
-      if (!object.material) return;
-      if (Array.isArray(object.material)) {
-        object.material.forEach((material) => material.dispose());
-      } else {
-        object.material.dispose();
-      }
-    });
+    disposeObject3D(group);
 
     this.resourceMeshes.delete(resourceId);
     this._rebuildPickableList();
@@ -520,56 +527,35 @@ export class ClusterRenderer {
   }
 
   frameResources(clusterBounds?: Map<string, ClusterBounds>): void {
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-
+    const positions: { x: number; z: number }[] = [];
     for (const group of this.resourceMeshes.values()) {
-      minX = Math.min(minX, group.position.x);
-      maxX = Math.max(maxX, group.position.x);
-      minZ = Math.min(minZ, group.position.z);
-      maxZ = Math.max(maxZ, group.position.z);
+      positions.push({ x: group.position.x, z: group.position.z });
     }
 
+    const { minX, maxX, minZ, maxZ } = computeBoundingBox(positions);
+
+    let finalMinX = minX, finalMaxX = maxX, finalMinZ = minZ, finalMaxZ = maxZ;
     for (const bounds of clusterBounds?.values() ?? []) {
-      minX = Math.min(minX, bounds.minX);
-      maxX = Math.max(maxX, bounds.maxX);
-      minZ = Math.min(minZ, bounds.minZ);
-      maxZ = Math.max(maxZ, bounds.maxZ);
+      finalMinX = Math.min(finalMinX, bounds.minX);
+      finalMaxX = Math.max(finalMaxX, bounds.maxX);
+      finalMinZ = Math.min(finalMinZ, bounds.minZ);
+      finalMaxZ = Math.max(finalMaxZ, bounds.maxZ);
     }
 
-    if (!Number.isFinite(minX)) {
+    if (!Number.isFinite(finalMinX)) {
       this.resetCamera();
       return;
     }
 
-    this._frameRegion(minX, maxX, minZ, maxZ);
+    this._frameRegion(finalMinX, finalMaxX, finalMinZ, finalMaxZ);
   }
 
   private _frameRegion(minX: number, maxX: number, minZ: number, maxZ: number): void {
-    const cx = (minX + maxX) / 2;
-    const cz = (minZ + maxZ) / 2;
-    const paddedWidth = Math.max(maxX - minX + 3, 9);
-    const paddedDepth = Math.max(maxZ - minZ + 3, 9);
     const aspect = this.camera.aspect || this.canvas.clientWidth / Math.max(this.canvas.clientHeight, 1) || 1;
-    const halfFov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
-    const tanHalfFov = Math.tan(halfFov);
+    const { position, target } = calculateFramingCamera({ minX, maxX, minZ, maxZ }, aspect);
 
-    const distanceForWidth = (paddedWidth / 2) / Math.max(tanHalfFov * aspect, 0.001);
-    const distanceForDepth = (paddedDepth / 2) / Math.max(tanHalfFov, 0.001);
-    const distance = Math.max(distanceForWidth, distanceForDepth, 15) * CAMERA_FRAME_PADDING;
-    const elevation = THREE.MathUtils.degToRad(35);
-
-    const target = new THREE.Vector3(cx, 0, cz);
-    const position = new THREE.Vector3(
-      cx,
-      distance * Math.sin(elevation) + 2,
-      cz + distance * Math.cos(elevation),
-    );
-
-    this.controls.maxDistance = Math.max(80, position.distanceTo(target) * 2);
-    this.camera.far = Math.max(500, position.distanceTo(target) * 4);
+    this.controls.maxDistance = Math.max(CONTROLS_MAX_DISTANCE, position.distanceTo(target) * 2);
+    this.camera.far = Math.max(CAMERA_FAR, position.distanceTo(target) * 4);
     this.camera.position.copy(position);
     this.controls.target.copy(target);
     this.camera.lookAt(target);

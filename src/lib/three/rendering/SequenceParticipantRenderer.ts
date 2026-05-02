@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import type { VisualizationSequenceParticipant } from '@/types/visualization';
+import { RENDER_ORDER, LABEL_FONT_FAMILY } from './constants.js';
+import { normalizeLabelText } from './labelUtils.js';
+import { createCanvasTexture } from './threeUtils.js';
 
 const BODY_COLOR = 0xb8daf3;
 const EDGE_COLOR = 0x7fb4da;
@@ -13,12 +16,7 @@ interface Entry {
 }
 
 function normalizeLines(text: string): string[] {
-  return text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
+  return normalizeLabelText(text);
 }
 
 function createLabelTexture(
@@ -42,7 +40,7 @@ function createLabelTexture(
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = LABEL_COLOR;
-  ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
+  ctx.font = `600 ${fontSize}px ${LABEL_FONT_FAMILY}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const lineHeight = Math.round(fontSize * 1.18);
@@ -51,10 +49,7 @@ function createLabelTexture(
     ctx.fillText(line, width / 2, startY + index * lineHeight, width - 18);
   }
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
+  const texture = createCanvasTexture(canvas);
   return texture;
 }
 
@@ -112,7 +107,7 @@ export class SequenceParticipantRenderer {
       );
       topLabel.rotation.x = -Math.PI / 2;
       topLabel.position.set(participant.x, participant.height + 0.03, participant.z);
-      topLabel.renderOrder = 6;
+      topLabel.renderOrder = RENDER_ORDER.NODE_LABEL;
       group.add(topLabel);
 
       const frontTexture = createLabelTexture(participant.label, 1024, 320, FRONT_LABEL_BG, 54);
@@ -130,7 +125,7 @@ export class SequenceParticipantRenderer {
         participant.height * 0.52,
         participant.z + participant.depth / 2 + 0.03,
       );
-      frontLabel.renderOrder = 6;
+      frontLabel.renderOrder = RENDER_ORDER.NODE_LABEL;
       group.add(frontLabel);
 
       this.group.add(group);

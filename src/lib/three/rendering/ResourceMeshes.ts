@@ -1,15 +1,21 @@
 import * as THREE from 'three';
 import type { VisualizationNode, VisualizationResourceStatus } from '@/types/visualization';
+import {
+  DEFAULT_NODE_WIDTH,
+  DEFAULT_NODE_HEIGHT,
+  DEFAULT_NODE_DEPTH,
+  DEFAULT_HALF_HEIGHT,
+  DEFAULT_NODE_COLOR,
+  DEFAULT_EMISSIVE_INTENSITY,
+  EDGE_LINE_COLOR,
+  RENDER_ORDER,
+  LABEL_FONT_FAMILY,
+  STATUS_COLORS,
+} from './constants.js';
+import { disposeObject3D, createCanvasTexture } from './threeUtils.js';
+import { normalizeLabelText } from './labelUtils.js';
 
-const STATUS_COLORS = {
-  idle: 0x94a3b8,
-  active: 0x94a3b8,
-  complete: 0x3b82f6,
-  error: 0xef4444,
-  default: 0x94a3b8,
-} as const;
-
-const BASE_COLOR = 0xe2e8f0;
+const BASE_COLOR = DEFAULT_NODE_COLOR;
 const TEXT_COLOR = '#1e293b';
 const LABEL_SURFACE_OFFSET = 0.08;
 const _labelTextureCache = new Map<string, THREE.CanvasTexture>();
@@ -67,12 +73,7 @@ function shortenLabel(resource: VisualizationNode): string {
 }
 
 function getLabelLines(text: string): string[] {
-  const normalized = text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .trim();
-  return normalized.split('\n').map((line) => line.trim()).filter(Boolean);
+  return normalizeLabelText(text);
 }
 
 function getStatusColor(status: VisualizationResourceStatus | undefined): number {
@@ -111,7 +112,7 @@ export function createLabelSprite(text: string, options: LabelSpriteOptions = {}
     height = 128,
     maxTextWidth = width - 32,
     scale = { x: 4.4, y: 0.78, z: 1 },
-    fontFamily = '"Inter", sans-serif',
+    fontFamily = LABEL_FONT_FAMILY,
   } = options;
   const texture = getLabelTexture(text, { fontSize, width, height, maxTextWidth, fontFamily });
 
@@ -132,7 +133,7 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
     width = 768,
     height = 128,
     maxTextWidth = width - 32,
-    fontFamily = '"Inter", sans-serif',
+    fontFamily = LABEL_FONT_FAMILY,
   } = options;
   const cacheKey = JSON.stringify({ text, fontSize, width, height, maxTextWidth, fontFamily });
 
@@ -161,10 +162,7 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
   }
   ctx.shadowBlur = 0;
 
-  texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.colorSpace = THREE.SRGBColorSpace;
+  texture = createCanvasTexture(canvas);
   _labelTextureCache.set(cacheKey, texture);
   return texture;
 }
@@ -176,7 +174,7 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
     height = 128,
     maxTextWidth = width - 32,
     scale = { x: 2.15, y: 0.54, z: 1 },
-    fontFamily = '"Inter", sans-serif',
+    fontFamily = LABEL_FONT_FAMILY,
   } = options;
 
   const texture = getLabelTexture(text, { fontSize, width, height, maxTextWidth, fontFamily });
@@ -196,7 +194,7 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
   );
   const userData = plane.userData as MeshUserData;
   userData.isLabel = true;
-  plane.renderOrder = 6;
+  plane.renderOrder = RENDER_ORDER.NODE_LABEL;
   return plane;
 }
 
@@ -206,14 +204,14 @@ function createBodyMaterial(nodeColor: number, statusColor: number): THREE.MeshS
     metalness: 0,
     roughness: 0.92,
     emissive: new THREE.Color(statusColor),
-    emissiveIntensity: 0.08,
+    emissiveIntensity: DEFAULT_EMISSIVE_INTENSITY,
   });
 }
 
 function createEdgeLines(geometry: THREE.BufferGeometry): THREE.LineSegments {
   const edgeGeometry = new THREE.EdgesGeometry(geometry);
   const edgeMaterial = new THREE.LineBasicMaterial({
-    color: 0x64748b,
+    color: EDGE_LINE_COLOR,
     transparent: true,
     opacity: 0.38,
   });
@@ -256,9 +254,9 @@ function createBoxResource(resource: VisualizationNode): ResourceGroup {
   const group = new THREE.Group();
   const statusColor = getStatusColor(resource.status);
   const nodeColor = resource.color || BASE_COLOR;
-  const width = resource.renderWidth ?? 2.8;
-  const height = resource.renderHeight ?? 1.3;
-  const depth = resource.renderDepth ?? 0.85;
+  const width = resource.renderWidth ?? DEFAULT_NODE_WIDTH;
+  const height = resource.renderHeight ?? DEFAULT_NODE_HEIGHT;
+  const depth = resource.renderDepth ?? DEFAULT_NODE_DEPTH;
 
   const geometry = roundedBoxGeometry(width, height, depth, 0.18);
   geometry.center();
@@ -272,7 +270,7 @@ function createBoxResource(resource: VisualizationNode): ResourceGroup {
 export class ResourceMeshFactory {
   create(resource: VisualizationNode): ResourceGroup {
     const group = createBoxResource(resource);
-    (group.userData as MeshUserData).halfHeight = (resource.renderHeight ?? 1.3) / 2;
+    (group.userData as MeshUserData).halfHeight = (resource.renderHeight ?? DEFAULT_NODE_HEIGHT) / 2;
     return group;
   }
 
@@ -305,18 +303,6 @@ export class ResourceMeshFactory {
 
   dispose(group: ResourceGroup | null | undefined): void {
     if (!group) return;
-    group.traverse((child) => {
-      const object = child as THREE.Object3D & {
-        geometry?: { dispose: () => void };
-        material?: THREE.Material | THREE.Material[];
-      };
-      object.geometry?.dispose();
-      if (!object.material) return;
-      const materials = Array.isArray(object.material) ? object.material : [object.material];
-      for (const material of materials) {
-        (material as THREE.Material & { map?: THREE.Texture | null }).map?.dispose();
-        material.dispose();
-      }
-    });
+    disposeObject3D(group);
   }
 }
