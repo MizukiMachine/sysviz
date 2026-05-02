@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ClusterBounds, VisualizationSubgraph } from '@/types/visualization';
-import { DEFAULT_HALF_HEIGHT, BORDER_COLOR as BORDER_CLR } from './constants.js';
+import { DEFAULT_HALF_HEIGHT, BORDER_COLOR as BORDER_CLR, RENDER_ORDER } from './constants.js';
 import { normalizeLabelText, roundRect } from './labelUtils.js';
 import { createCanvasTexture } from './threeUtils.js';
 
@@ -232,7 +232,7 @@ export class SubgraphRenderer {
         svgBounds?.labelCenterZ ?? cz,
       );
       topLabelPlane.userData.isLabel = true;
-      topLabelPlane.renderOrder = 8;
+      topLabelPlane.renderOrder = RENDER_ORDER.CONNECTION_LABEL;
       sgGroup.add(topLabelPlane);
 
       this.group.add(sgGroup);

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ClusterBounds, VisualizationConnection, VisualizationPathPoint } from '@/types/visualization';
-import { MAX_CURVE_SEGMENTS, FLOWCHART_EDGE_Y } from './constants.js';
+import { MAX_CURVE_SEGMENTS, FLOWCHART_EDGE_Y, RENDER_ORDER } from './constants.js';
 import { buildConnectionCurve } from './curveUtils.js';
 import { createPillLabelTexture } from './labelUtils.js';
 
@@ -151,9 +151,9 @@ export class ConnectionLineManager {
       }),
     );
     const line = new THREE.Line(geometry, material);
-    underlay.renderOrder = 3;
+    underlay.renderOrder = RENDER_ORDER.UNDERLAY;
     line.computeLineDistances();
-    line.renderOrder = 4;
+    line.renderOrder = RENDER_ORDER.CONNECTION;
 
     const userData = line.userData as LineUserData;
     userData.connectionId = connection.id;
@@ -286,7 +286,7 @@ export class ConnectionLineManager {
       opacity: 0.88,
       sizeAttenuation: true,
     }));
-    sprite.renderOrder = 8;
+    sprite.renderOrder = RENDER_ORDER.CONNECTION_LABEL;
     sprite.position.copy(midpoint);
     sprite.position.y += 0.4;
     sprite.scale.set(2.6, 0.42, 1);

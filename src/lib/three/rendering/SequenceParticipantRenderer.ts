@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { VisualizationSequenceParticipant } from '@/types/visualization';
+import { RENDER_ORDER } from './constants.js';
 import { normalizeLabelText } from './labelUtils.js';
 
 const BODY_COLOR = 0xb8daf3;
@@ -108,7 +109,7 @@ export class SequenceParticipantRenderer {
       );
       topLabel.rotation.x = -Math.PI / 2;
       topLabel.position.set(participant.x, participant.height + 0.03, participant.z);
-      topLabel.renderOrder = 6;
+      topLabel.renderOrder = RENDER_ORDER.NODE_LABEL;
       group.add(topLabel);
 
       const frontTexture = createLabelTexture(participant.label, 1024, 320, FRONT_LABEL_BG, 54);
@@ -126,7 +127,7 @@ export class SequenceParticipantRenderer {
         participant.height * 0.52,
         participant.z + participant.depth / 2 + 0.03,
       );
-      frontLabel.renderOrder = 6;
+      frontLabel.renderOrder = RENDER_ORDER.NODE_LABEL;
       group.add(frontLabel);
 
       this.group.add(group);

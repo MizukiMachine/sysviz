@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { VisualizationRoute } from '@/types/visualization';
+import { RENDER_ORDER } from './constants.js';
 import { buildConnectionCurve } from './curveUtils.js';
 import { createPillLabelTexture } from './labelUtils.js';
 
@@ -205,7 +206,7 @@ export class ParticleTrafficSystem {
         opacity: 0,
       }));
       sprite.visible = false;
-      sprite.renderOrder = 12;
+      sprite.renderOrder = RENDER_ORDER.PARTICLE_LABEL;
       sprite.scale.set(PARTICLE_LABEL_SCALE.x, PARTICLE_LABEL_SCALE.y, PARTICLE_LABEL_SCALE.z);
       this.labelSprites[i] = sprite;
       this.scene.add(sprite);

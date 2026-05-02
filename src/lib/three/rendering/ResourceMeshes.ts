@@ -8,6 +8,7 @@ import {
   DEFAULT_NODE_COLOR,
   DEFAULT_EMISSIVE_INTENSITY,
   EDGE_LINE_COLOR,
+  RENDER_ORDER,
 } from './constants.js';
 import { disposeObject3D } from './threeUtils.js';
 import { normalizeLabelText } from './labelUtils.js';
@@ -202,7 +203,7 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
   );
   const userData = plane.userData as MeshUserData;
   userData.isLabel = true;
-  plane.renderOrder = 6;
+  plane.renderOrder = RENDER_ORDER.NODE_LABEL;
   return plane;
 }
 
