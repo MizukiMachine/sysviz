@@ -2,7 +2,7 @@
  * Shared label utilities: text normalization, round rect, pill label texture.
  */
 import * as THREE from 'three';
-import { LABEL_FONT_FAMILY } from './constants.js';
+import { LABEL_FONT_FAMILY, DEFAULT_CANVAS_WIDTH } from './constants.js';
 import { createCanvasTexture } from './threeUtils.js';
 
 // ── Text normalization ───────────────────────────────────────────────────
@@ -64,7 +64,7 @@ export interface PillLabelOptions {
 }
 
 const DEFAULT_PILL_OPTIONS: Required<PillLabelOptions> = {
-  canvasWidth: 1024,
+  canvasWidth: DEFAULT_CANVAS_WIDTH,
   canvasHeight: 160,
   fontWeight: '600',
   fontSize: 32,

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { VisualizationSequenceParticipant } from '@/types/visualization';
-import { RENDER_ORDER, LABEL_FONT_FAMILY, FLAT_ROTATION_X } from './constants.js';
+import { RENDER_ORDER, LABEL_FONT_FAMILY, FLAT_ROTATION_X, DEFAULT_CANVAS_WIDTH } from './constants.js';
 import { normalizeLabelText } from './labelUtils.js';
 import { createCanvasTexture } from './threeUtils.js';
 
@@ -95,7 +95,7 @@ export class SequenceParticipantRenderer {
       edges.position.copy(body.position);
       group.add(edges);
 
-      const topTexture = createLabelTexture(participant.label, 1024, 256, TOP_LABEL_BG, 56);
+      const topTexture = createLabelTexture(participant.label, DEFAULT_CANVAS_WIDTH, 256, TOP_LABEL_BG, 56);
       const topLabel = new THREE.Mesh(
         new THREE.PlaneGeometry(participant.width * 0.92, participant.depth * 0.72),
         new THREE.MeshBasicMaterial({
@@ -110,7 +110,7 @@ export class SequenceParticipantRenderer {
       topLabel.renderOrder = RENDER_ORDER.NODE_LABEL;
       group.add(topLabel);
 
-      const frontTexture = createLabelTexture(participant.label, 1024, 320, FRONT_LABEL_BG, 54);
+      const frontTexture = createLabelTexture(participant.label, DEFAULT_CANVAS_WIDTH, 320, FRONT_LABEL_BG, 54);
       const frontLabel = new THREE.Mesh(
         new THREE.PlaneGeometry(participant.width * 0.92, participant.height * 0.82),
         new THREE.MeshBasicMaterial({
