@@ -24,10 +24,6 @@ interface DisposableObject3D extends THREE.Object3D {
   material?: THREE.Material | THREE.Material[];
 }
 
-function getLabelLines(text: string): string[] {
-  return normalizeLabelText(text);
-}
-
 function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   const cW = DEFAULT_CANVAS_WIDTH;
@@ -36,7 +32,7 @@ function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTe
   canvas.height = cH;
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
 
-  const safeLines = getLabelLines(text);
+  const safeLines = normalizeLabelText(text);
   const lineHeight = Math.round(fontSize * 1.25);
   const textBlockHeight = lineHeight * safeLines.length;
   const startY = cH / 2 - textBlockHeight / 2 + lineHeight / 2;
@@ -186,7 +182,7 @@ export class SubgraphRenderer {
       }
 
       const title = sg.title || sg.id;
-      const titleLines = getLabelLines(title);
+      const titleLines = normalizeLabelText(title);
 
       const planeW = Math.min(
         Math.max(

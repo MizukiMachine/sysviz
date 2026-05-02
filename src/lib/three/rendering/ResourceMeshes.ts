@@ -73,10 +73,6 @@ function shortenLabel(resource: VisualizationNode): string {
   return `${name.slice(0, 11).trimEnd()}…`;
 }
 
-function getLabelLines(text: string): string[] {
-  return normalizeLabelText(text);
-}
-
 function getStatusColor(status: VisualizationResourceStatus | undefined): number {
   if (!status) return STATUS_COLORS.default;
   return STATUS_COLORS[String(status).toLowerCase() as keyof typeof STATUS_COLORS] || STATUS_COLORS.default;
@@ -145,7 +141,7 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-  const lines = getLabelLines(text);
+  const lines = normalizeLabelText(text);
   const safeLines = lines.length > 0 ? lines : [''];
 
   ctx.clearRect(0, 0, width, height);

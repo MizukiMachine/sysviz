@@ -15,10 +15,6 @@ interface Entry {
   textures: THREE.Texture[];
 }
 
-function normalizeLines(text: string): string[] {
-  return normalizeLabelText(text);
-}
-
 function createLabelTexture(
   text: string,
   width: number,
@@ -34,7 +30,7 @@ function createLabelTexture(
     throw new Error('SequenceParticipantRenderer: failed to create canvas context');
   }
 
-  const lines = normalizeLines(text);
+  const lines = normalizeLabelText(text);
   const safeLines = lines.length > 0 ? lines : [''];
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = background;
