@@ -108,7 +108,7 @@ export const MERMAID_PATHS: Record<string, string> = Object.fromEntries(
   BUILTIN_PROJECTS.flatMap((project) =>
     project.diagrams
       .filter((d) => d.filePath != null)
-      .map((d) => [toMermaidKey(project.id, d.id), d.filePath as string]),
+      .map((d) => [toMermaidKey(project.id, d.id), d.filePath!]),
   ),
 );
 

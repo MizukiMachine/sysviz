@@ -74,8 +74,8 @@ export class FlatDiagramRenderer {
   private _clearCurrent(): void {
     if (!this.current) return;
     this.group.remove(this.current.group);
-    disposeObject3D(this.current.group);
     this._disposeTexture(this.current.texture);
+    disposeObject3D(this.current.group);
     this.current = null;
   }
 
