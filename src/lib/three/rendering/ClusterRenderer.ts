@@ -8,7 +8,7 @@ import type { ClusterBounds, VisualizationCamera, VisualizationConnection, Visua
 const BACKGROUND_COLOR = 0xfafafa;
 const HIGHLIGHT_COLOR = 0xbfdbfe;
 const SELECT_COLOR = 0xfbcfe8;
-const CAMERA_FRAME_PADDING = 1.35;
+const CAMERA_FRAME_PADDING = 1.10;
 const LABEL_FULL_DISTANCE = 18;
 const LABEL_SHORT_DISTANCE = 34;
 
@@ -125,7 +125,7 @@ export class ClusterRenderer {
   _initCamera(): void {
     const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
     this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 500);
-    this.camera.position.set(2.5, 8, 20);
+    this.camera.position.set(2.5, 6, 14);
     this.camera.lookAt(2.5, 0, 0);
     this._initialCameraPosition.copy(this.camera.position);
   }
@@ -550,8 +550,8 @@ export class ClusterRenderer {
   private _frameRegion(minX: number, maxX: number, minZ: number, maxZ: number): void {
     const cx = (minX + maxX) / 2;
     const cz = (minZ + maxZ) / 2;
-    const paddedWidth = Math.max(maxX - minX + 8, 12);
-    const paddedDepth = Math.max(maxZ - minZ + 8, 12);
+    const paddedWidth = Math.max(maxX - minX + 3, 9);
+    const paddedDepth = Math.max(maxZ - minZ + 3, 9);
     const aspect = this.camera.aspect || this.canvas.clientWidth / Math.max(this.canvas.clientHeight, 1) || 1;
     const halfFov = THREE.MathUtils.degToRad(this.camera.fov) / 2;
     const tanHalfFov = Math.tan(halfFov);

@@ -907,13 +907,13 @@ export class MermaidParser {
 
     if (diagramType === 'flowchart') {
       return {
-        position: [0, Math.max(18, maxSpan * 0.82), Math.max(10, maxSpan * 0.42)],
+        position: [0, Math.max(13, maxSpan * 0.60), Math.max(6, maxSpan * 0.30)],
         target: [0, 0, 0],
       };
     }
 
     return {
-      position: [0, Math.max(26, maxSpan * 1.18), 0.01],
+      position: [0, Math.max(18, maxSpan * 0.82), 0.01],
       target: [0, 0, 0],
     };
   }
@@ -1827,11 +1827,11 @@ export class MermaidParser {
     const FOV_DEG = 45;
     const halfFovRad = (FOV_DEG / 2) * (Math.PI / 180);
     const tanHalf = Math.tan(halfFovRad);
-    const PADDED_X = Math.max(spreadX + 8, 12);
-    const PADDED_Z = Math.max(spreadZ + 8, 12);
+    const PADDED_X = Math.max(spreadX + 3, 7);
+    const PADDED_Z = Math.max(spreadZ + 3, 7);
     const distForX = (PADDED_X / 1.5) / tanHalf;
     const distForZ = PADDED_Z / tanHalf;
-    const dist = Math.max(distForX, distForZ, 15);
+    const dist = Math.max(distForX, distForZ, 9);
 
     const ELEVATION_ANGLE = 35 * (Math.PI / 180);
     const camY = dist * Math.sin(ELEVATION_ANGLE) + 2;
