@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { ClusterBounds, VisualizationConnection, VisualizationPathPoint } from '@/types/visualization';
-import { MAX_CURVE_SEGMENTS, FLOWCHART_EDGE_Y, RENDER_ORDER } from './constants.js';
+import {
+  MAX_CURVE_SEGMENTS, FLOWCHART_EDGE_Y, RENDER_ORDER,
+  EDGE_LABEL_SPRITE_SCALE_X, EDGE_LABEL_SPRITE_SCALE_Y,
+  EDGE_LABEL_Y_OFFSET, EDGE_LABEL_FONT_SIZE, EDGE_LABEL_BOX_HEIGHT,
+} from './constants.js';
 import { buildConnectionCurve } from './curveUtils.js';
 import { createPillLabelTexture } from './labelUtils.js';
 
@@ -226,7 +230,7 @@ export class ConnectionLineManager {
       const midpoint = curve.getPoint(0.5);
       if (entry.labelSprite) {
         entry.labelSprite.position.copy(midpoint);
-        entry.labelSprite.position.y += 0.32;
+        entry.labelSprite.position.y += EDGE_LABEL_Y_OFFSET;
       }
 
       const sampledPoints = this._sampleCurve(curve);
@@ -288,8 +292,8 @@ export class ConnectionLineManager {
     }));
     sprite.renderOrder = RENDER_ORDER.CONNECTION_LABEL;
     sprite.position.copy(midpoint);
-    sprite.position.y += 0.4;
-    sprite.scale.set(2.6, 0.42, 1);
+    sprite.position.y += EDGE_LABEL_Y_OFFSET;
+    sprite.scale.set(EDGE_LABEL_SPRITE_SCALE_X, EDGE_LABEL_SPRITE_SCALE_Y, 1);
     return sprite;
   }
 
@@ -300,7 +304,10 @@ export class ConnectionLineManager {
       return this.labelTextures.get(label) || null;
     }
 
-    const texture = createPillLabelTexture(label);
+    const texture = createPillLabelTexture(label, {
+      fontSize: EDGE_LABEL_FONT_SIZE,
+      boxHeight: EDGE_LABEL_BOX_HEIGHT,
+    });
     this.labelTextures.set(label, texture);
     return texture;
   }

@@ -23,7 +23,7 @@ export function DiagramSwitcher({
   if (diagrams.length === 0) return null;
 
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 bottom-7 z-20 flex items-center gap-2 px-3 py-2.5 glass-pill">
+    <div className="fixed left-1/2 -translate-x-1/2 top-7 z-20 flex items-center gap-2 px-3 py-2.5 glass-pill">
       {diagrams.map((diagram) => {
         const isActive = diagram.id === value;
         const isDisabled = disabledOptions?.has(diagram.id);

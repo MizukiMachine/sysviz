@@ -53,32 +53,8 @@ export function SettingsDialog({
             <div className="mb-4">
               <h3 className="text-sm font-semibold text-slate-800">LLM</h3>
               <p className="mt-1 text-xs text-slate-500">
-                チャットとキャプション補完に使う設定です。
+                チャットとキャプション補完に使う GLM API の設定です。
               </p>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                Provider
-              </label>
-              <div className="flex gap-2">
-                {(['gemini', 'glm'] as const).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setForm({ ...form, provider: p })}
-                    className={`
-                      flex-1 py-2 px-3 rounded-xl text-sm font-medium border transition-colors cursor-pointer
-                      ${
-                        form.provider === p
-                          ? 'border-blue-300/60 bg-blue-50 text-blue-700'
-                          : 'border-slate-200/60 bg-white/50 text-slate-600 hover:bg-white/80'
-                      }
-                    `}
-                  >
-                    {p === 'gemini' ? 'Gemini' : 'GLM'}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="mb-4">
@@ -87,17 +63,9 @@ export function SettingsDialog({
               </label>
               <input
                 type="password"
-                value={form[form.provider].apiKey}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    [form.provider]: {
-                      ...form[form.provider],
-                      apiKey: e.target.value,
-                    },
-                  })
-                }
-                placeholder={form.provider === 'gemini' ? 'AIza...' : 'sk-...'}
+                value={form.apiKey}
+                onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                placeholder="sk-..."
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200/60 bg-white/60 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-400/50 font-mono"
               />
             </div>

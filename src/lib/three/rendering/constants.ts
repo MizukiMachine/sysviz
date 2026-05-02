@@ -60,6 +60,13 @@ export const DEFAULT_CANVAS_WIDTH = 1024;
 // ── Label / font ─────────────────────────────────────────────────────────
 export const LABEL_FONT_FAMILY = '"Inter", sans-serif';
 
+// ── Edge label ───────────────────────────────────────────────────────────
+export const EDGE_LABEL_SPRITE_SCALE_X = 4.3;
+export const EDGE_LABEL_SPRITE_SCALE_Y = 0.85;
+export const EDGE_LABEL_Y_OFFSET = 0.8;
+export const EDGE_LABEL_FONT_SIZE = 46;
+export const EDGE_LABEL_BOX_HEIGHT = 94;
+
 // ── Edge colors ──────────────────────────────────────────────────────────
 export const EDGE_LINE_COLOR = 0x64748b;
 export const BORDER_COLOR = 0x94a3b8;
