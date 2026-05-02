@@ -9,6 +9,7 @@ import {
   DEFAULT_EMISSIVE_INTENSITY,
   EDGE_LINE_COLOR,
   RENDER_ORDER,
+  LABEL_FONT_FAMILY,
 } from './constants.js';
 import { disposeObject3D, createCanvasTexture } from './threeUtils.js';
 import { normalizeLabelText } from './labelUtils.js';
@@ -118,7 +119,7 @@ export function createLabelSprite(text: string, options: LabelSpriteOptions = {}
     height = 128,
     maxTextWidth = width - 32,
     scale = { x: 4.4, y: 0.78, z: 1 },
-    fontFamily = '"Inter", sans-serif',
+    fontFamily = LABEL_FONT_FAMILY,
   } = options;
   const texture = getLabelTexture(text, { fontSize, width, height, maxTextWidth, fontFamily });
 
@@ -139,7 +140,7 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
     width = 768,
     height = 128,
     maxTextWidth = width - 32,
-    fontFamily = '"Inter", sans-serif',
+    fontFamily = LABEL_FONT_FAMILY,
   } = options;
   const cacheKey = JSON.stringify({ text, fontSize, width, height, maxTextWidth, fontFamily });
 
@@ -180,7 +181,7 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
     height = 128,
     maxTextWidth = width - 32,
     scale = { x: 2.15, y: 0.54, z: 1 },
-    fontFamily = '"Inter", sans-serif',
+    fontFamily = LABEL_FONT_FAMILY,
   } = options;
 
   const texture = getLabelTexture(text, { fontSize, width, height, maxTextWidth, fontFamily });

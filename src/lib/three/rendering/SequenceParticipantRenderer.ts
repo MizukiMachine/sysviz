@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { VisualizationSequenceParticipant } from '@/types/visualization';
-import { RENDER_ORDER } from './constants.js';
+import { RENDER_ORDER, LABEL_FONT_FAMILY } from './constants.js';
 import { normalizeLabelText } from './labelUtils.js';
 import { createCanvasTexture } from './threeUtils.js';
 
@@ -40,7 +40,7 @@ function createLabelTexture(
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = LABEL_COLOR;
-  ctx.font = `600 ${fontSize}px "Inter", sans-serif`;
+  ctx.font = `600 ${fontSize}px ${LABEL_FONT_FAMILY}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const lineHeight = Math.round(fontSize * 1.18);

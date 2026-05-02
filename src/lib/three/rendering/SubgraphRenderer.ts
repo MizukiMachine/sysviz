@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ClusterBounds, VisualizationSubgraph } from '@/types/visualization';
-import { DEFAULT_HALF_HEIGHT, BORDER_COLOR as BORDER_CLR, RENDER_ORDER } from './constants.js';
+import { DEFAULT_HALF_HEIGHT, BORDER_COLOR as BORDER_CLR, RENDER_ORDER, LABEL_FONT_FAMILY } from './constants.js';
 import { normalizeLabelText, roundRect } from './labelUtils.js';
 import { createCanvasTexture } from './threeUtils.js';
 
@@ -54,7 +54,7 @@ function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTe
   ctx.stroke();
 
   ctx.fillStyle = 'rgba(51, 65, 85, 0.85)';
-  ctx.font = `700 ${fontSize}px "Inter", sans-serif`;
+  ctx.font = `700 ${fontSize}px ${LABEL_FONT_FAMILY}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (const [index, line] of safeLines.entries()) {
