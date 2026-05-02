@@ -62,6 +62,15 @@ export const BUILTIN_PROJECTS = [
   },
 ] as const satisfies readonly Project[];
 
+// Flask was the original project; its legacy mermaid keys omit the "flask-" prefix
+// (e.g. "flask-component" → "mermaid-component", not "mermaid-flask-component").
+function toMermaidKey(projectId: string, diagramId: string): string {
+  if (projectId === 'flask') {
+    return `mermaid-${diagramId.slice(projectId.length + 1)}`;
+  }
+  return `mermaid-${diagramId}`;
+}
+
 // ---------------------------------------------------------------------------
 // Legacy view system (kept for backward compatibility with GitLab integration)
 // ---------------------------------------------------------------------------
@@ -74,18 +83,13 @@ export interface ViewEntry {
   diagramType?: 'flowchart' | 'sequence';
 }
 
-export const BUILTIN_VIEW_OPTIONS = [
-  { value: 'mermaid-layered-architecture', label: 'Flask: Layered Architecture (.mmd)', source: 'builtin' },
-  { value: 'mermaid-component', label: 'Flask: Component (.mmd)', source: 'builtin' },
-  { value: 'mermaid-data-flow', label: 'Flask: Data Flow (.mmd)', source: 'builtin' },
-  { value: 'mermaid-dependency', label: 'Flask: Dependency (.mmd)', source: 'builtin' },
-  { value: 'mermaid-sequence-request', label: 'Flask: Request Lifecycle (sequenceDiagram)', source: 'builtin' },
-  { value: 'mermaid-fastapi-layered-architecture', label: 'FastAPI: Layered Architecture (.mmd)', source: 'builtin' },
-  { value: 'mermaid-fastapi-component', label: 'FastAPI: Component (.mmd)', source: 'builtin' },
-  { value: 'mermaid-fastapi-sequence-request', label: 'FastAPI: Request Lifecycle (sequenceDiagram)', source: 'builtin' },
-  { value: 'mermaid-fastapi-dependency', label: 'FastAPI: Dependency Injection (.mmd)', source: 'builtin' },
-  { value: 'mermaid-fastapi-data-flow', label: 'FastAPI: Data Flow / OpenAPI (.mmd)', source: 'builtin' },
-] as const satisfies readonly ViewEntry[];
+export const BUILTIN_VIEW_OPTIONS = BUILTIN_PROJECTS.flatMap((project) =>
+  project.diagrams.map((diagram) => ({
+    value: toMermaidKey(project.id, diagram.id),
+    label: `${project.label}: ${diagram.label} (${diagram.diagramType === 'sequence' ? 'sequenceDiagram' : '.mmd'})`,
+    source: 'builtin' as const,
+  })),
+) satisfies readonly ViewEntry[];
 
 export const VIEW_OPTIONS: ViewEntry[] = [...BUILTIN_VIEW_OPTIONS];
 
@@ -93,32 +97,20 @@ export type VisualizationKey = string;
 
 export const DEFAULT_VIEW = 'flask-data-flow';
 
-export const VIEW_LABELS: Record<string, string> = {
-  'flask-layered-architecture': 'Flask Layered Architecture',
-  'flask-component': 'Flask Component',
-  'flask-data-flow': 'Flask Data Flow',
-  'flask-dependency': 'Flask Dependency',
-  'flask-sequence-request': 'Flask Request Lifecycle',
-  'fastapi-layered-architecture': 'FastAPI Layered Architecture',
-  'fastapi-component': 'FastAPI Component',
-  'fastapi-sequence-request': 'FastAPI Request Lifecycle',
-  'fastapi-dependency': 'FastAPI Dependency Injection',
-  'fastapi-data-flow': 'FastAPI Data Flow / OpenAPI',
-};
+export const VIEW_LABELS: Record<string, string> = Object.fromEntries(
+  BUILTIN_PROJECTS.flatMap((project) =>
+    project.diagrams.map((d) => [d.id, `${project.label} ${d.label}`]),
+  ),
+);
 
 // Legacy path mapping (kept for GitLab compatibility)
-export const MERMAID_PATHS: Record<string, string> = {
-  'mermaid-layered-architecture': '/data/01_layered_architecture.mmd',
-  'mermaid-component': '/data/02_component.mmd',
-  'mermaid-data-flow': '/data/03_data_flow.mmd',
-  'mermaid-dependency': '/data/04_dependency.mmd',
-  'mermaid-sequence-request': '/data/05_sequence_request_lifecycle.mmd',
-  'mermaid-fastapi-layered-architecture': '/data/11_fastapi_layered_architecture.mmd',
-  'mermaid-fastapi-component': '/data/12_fastapi_component.mmd',
-  'mermaid-fastapi-sequence-request': '/data/13_fastapi_sequence_request_lifecycle.mmd',
-  'mermaid-fastapi-dependency': '/data/14_fastapi_dependency_injection.mmd',
-  'mermaid-fastapi-data-flow': '/data/15_fastapi_data_flow_openapi.mmd',
-};
+export const MERMAID_PATHS: Record<string, string> = Object.fromEntries(
+  BUILTIN_PROJECTS.flatMap((project) =>
+    project.diagrams
+      .filter((d) => d.filePath != null)
+      .map((d) => [toMermaidKey(project.id, d.id), d.filePath as string]),
+  ),
+);
 
 // ---------------------------------------------------------------------------
 // GitLab helpers
