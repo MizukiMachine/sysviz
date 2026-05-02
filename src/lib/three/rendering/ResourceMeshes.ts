@@ -10,17 +10,10 @@ import {
   EDGE_LINE_COLOR,
   RENDER_ORDER,
   LABEL_FONT_FAMILY,
+  STATUS_COLORS,
 } from './constants.js';
 import { disposeObject3D, createCanvasTexture } from './threeUtils.js';
 import { normalizeLabelText } from './labelUtils.js';
-
-const STATUS_COLORS = {
-  idle: 0x94a3b8,
-  active: 0x94a3b8,
-  complete: 0x3b82f6,
-  error: 0xef4444,
-  default: 0x94a3b8,
-} as const;
 
 const BASE_COLOR = DEFAULT_NODE_COLOR;
 const TEXT_COLOR = '#1e293b';

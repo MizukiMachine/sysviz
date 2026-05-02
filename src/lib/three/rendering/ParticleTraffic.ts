@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { VisualizationRoute } from '@/types/visualization';
-import { RENDER_ORDER } from './constants.js';
+import { RENDER_ORDER, TRAFFIC_COLORS as TRAFFIC_COLORS_HEX } from './constants.js';
 import { buildConnectionCurve } from './curveUtils.js';
 import { createPillLabelTexture } from './labelUtils.js';
 
@@ -15,10 +15,10 @@ const FADE_OUT_START = 0.85;
 const PARTICLE_LABEL_SCALE = { x: 3.0, y: 0.75, z: 1 };
 
 const TRAFFIC_COLORS = {
-  healthy: new THREE.Color(0x3fb950),
-  error: new THREE.Color(0xf85149),
-  slow: new THREE.Color(0xd29922),
-  default: new THREE.Color(0x60a5fa),
+  healthy: new THREE.Color(TRAFFIC_COLORS_HEX.healthy),
+  error: new THREE.Color(TRAFFIC_COLORS_HEX.error),
+  slow: new THREE.Color(TRAFFIC_COLORS_HEX.slow),
+  default: new THREE.Color(TRAFFIC_COLORS_HEX.default),
 } as const;
 
 const vertexShader = `

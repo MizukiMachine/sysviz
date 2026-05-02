@@ -57,3 +57,24 @@ export const LABEL_FONT_FAMILY = '"Inter", sans-serif';
 // ── Edge colors ──────────────────────────────────────────────────────────
 export const EDGE_LINE_COLOR = 0x64748b;
 export const BORDER_COLOR = 0x94a3b8;
+
+// ── Status colors (resource health) ──────────────────────────────────────
+export const STATUS_COLORS = {
+  idle: 0x94a3b8,
+  active: 0x94a3b8,
+  complete: 0x3b82f6,
+  error: 0xef4444,
+  default: 0x94a3b8,
+} as const;
+
+// ── Traffic colors (particle routes) ─────────────────────────────────────
+export const TRAFFIC_COLORS = {
+  healthy: 0x3fb950,
+  error: 0xf85149,
+  slow: 0xd29922,
+  default: 0x60a5fa,
+} as const;
+
+// ── Cluster highlight colors ─────────────────────────────────────────────
+export const CLUSTER_HIGHLIGHT_COLOR = 0xbfdbfe;
+export const CLUSTER_SELECT_COLOR = 0xfbcfe8;

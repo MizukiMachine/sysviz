@@ -17,12 +17,14 @@ import {
   DEFAULT_HALF_HEIGHT,
   CAMERA_BOUNDS_PADDING,
   CAMERA_MIN_SPAN,
+  CLUSTER_HIGHLIGHT_COLOR,
+  CLUSTER_SELECT_COLOR,
 } from './constants.js';
 import { calculateFramingCamera, computeBoundingBox } from './cameraUtils.js';
 import { disposeObject3D } from './threeUtils.js';
 
-const HIGHLIGHT_COLOR = 0xbfdbfe;
-const SELECT_COLOR = 0xfbcfe8;
+const HIGHLIGHT_COLOR = CLUSTER_HIGHLIGHT_COLOR;
+const SELECT_COLOR = CLUSTER_SELECT_COLOR;
 const LABEL_FULL_DISTANCE = 18;
 const LABEL_SHORT_DISTANCE = 34;
 
