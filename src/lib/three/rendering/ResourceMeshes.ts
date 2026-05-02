@@ -11,6 +11,7 @@ import {
   RENDER_ORDER,
   LABEL_FONT_FAMILY,
   STATUS_COLORS,
+  FLAT_ROTATION_X,
 } from './constants.js';
 import { disposeObject3D, createCanvasTexture } from './threeUtils.js';
 import { normalizeLabelText } from './labelUtils.js';
@@ -70,10 +71,6 @@ function shortenLabel(resource: VisualizationNode): string {
   }
 
   return `${name.slice(0, 11).trimEnd()}…`;
-}
-
-function getLabelLines(text: string): string[] {
-  return normalizeLabelText(text);
 }
 
 function getStatusColor(status: VisualizationResourceStatus | undefined): number {
@@ -144,7 +141,7 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-  const lines = getLabelLines(text);
+  const lines = normalizeLabelText(text);
   const safeLines = lines.length > 0 ? lines : [''];
 
   ctx.clearRect(0, 0, width, height);
@@ -228,7 +225,7 @@ function addBoxLabels(group: ResourceGroup, resource: VisualizationNode, width: 
     maxTextWidth: 1590,
     scale: { x: width * 0.995, y: depth * 0.97, z: 1 },
   });
-  topLabel.rotation.x = -Math.PI / 2;
+  topLabel.rotation.x = FLAT_ROTATION_X;
   topLabel.position.set(0, height / 2 + LABEL_SURFACE_OFFSET, 0);
   group.add(topLabel);
 
