@@ -72,8 +72,7 @@ function createFloorLabelTexture(text: string, fontSize: number): THREE.CanvasTe
   ctx.lineTo((cW + lineW) / 2, cH / 2 + underlineOffset);
   ctx.stroke();
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
+  const texture = createCanvasTexture(canvas);
   return texture;
 }
 

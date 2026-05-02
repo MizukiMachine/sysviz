@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { VisualizationSequenceParticipant } from '@/types/visualization';
 import { RENDER_ORDER } from './constants.js';
 import { normalizeLabelText } from './labelUtils.js';
+import { createCanvasTexture } from './threeUtils.js';
 
 const BODY_COLOR = 0xb8daf3;
 const EDGE_COLOR = 0x7fb4da;
@@ -48,10 +49,7 @@ function createLabelTexture(
     ctx.fillText(line, width / 2, startY + index * lineHeight, width - 18);
   }
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
+  const texture = createCanvasTexture(canvas);
   return texture;
 }
 

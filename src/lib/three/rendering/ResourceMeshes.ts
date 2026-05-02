@@ -10,7 +10,7 @@ import {
   EDGE_LINE_COLOR,
   RENDER_ORDER,
 } from './constants.js';
-import { disposeObject3D } from './threeUtils.js';
+import { disposeObject3D, createCanvasTexture } from './threeUtils.js';
 import { normalizeLabelText } from './labelUtils.js';
 
 const STATUS_COLORS = {
@@ -168,10 +168,7 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
   }
   ctx.shadowBlur = 0;
 
-  texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.colorSpace = THREE.SRGBColorSpace;
+  texture = createCanvasTexture(canvas);
   _labelTextureCache.set(cacheKey, texture);
   return texture;
 }
