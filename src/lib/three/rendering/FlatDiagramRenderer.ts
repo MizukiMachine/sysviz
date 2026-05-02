@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { VisualizationFlatDiagram } from '@/types/visualization';
+import { disposeObject3D } from './threeUtils';
 
 const BASE_Y = 0.02;
 
@@ -73,15 +74,7 @@ export class FlatDiagramRenderer {
   private _clearCurrent(): void {
     if (!this.current) return;
     this.group.remove(this.current.group);
-    this.current.group.traverse((child) => {
-      const mesh = child as THREE.Mesh;
-      mesh.geometry?.dispose();
-      if (!mesh.material) return;
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      for (const material of materials) {
-        material.dispose();
-      }
-    });
+    disposeObject3D(this.current.group);
     this._disposeTexture(this.current.texture);
     this.current = null;
   }
