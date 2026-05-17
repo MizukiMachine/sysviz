@@ -1,31 +1,120 @@
-import { lazy, Suspense, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { Canvas3D, type Canvas3DHandle } from './components/Canvas3D';
 import { ProjectSelector } from './components/ProjectSelector';
 import { DiagramSwitcher } from './components/DiagramSwitcher';
 import { useChat } from './hooks/useChat';
 import { useVisualizationController } from './hooks/useVisualizationController';
-import { BUILTIN_PROJECTS, createGitLabProject } from './lib/views/viewRegistry';
+import { BUILTIN_PROJECTS, createGitLabProject, deriveLabel, type Project } from './lib/views/viewRegistry';
 import { useGitLab } from './hooks/useGitLab';
 
 const ChatPanel = lazy(() =>
   import('./components/ChatPanel').then((module) => ({ default: module.ChatPanel }))
 );
 
-export default function App() {
+interface AppProps {
+  dataPath?: string;
+  glmPath?: string;
+}
+
+interface SysvizDataManifest {
+  projects?: Array<{
+    id?: string;
+    label?: string;
+    diagrams?: Array<{
+      id?: string;
+      label?: string;
+      filePath?: string;
+      diagramType?: string;
+    }>;
+  }>;
+}
+
+function normalizeDataPath(dataPath?: string): string {
+  const normalized = (dataPath || '/data').replace(/\/+$/, '');
+  return normalized || '/data';
+}
+
+function normalizeDataManifest(manifest: SysvizDataManifest): Project[] {
+  return (manifest.projects ?? [])
+    .map((project, projectIndex) => {
+      const projectId = project.id || `local-${projectIndex + 1}`;
+      const diagrams = (project.diagrams ?? [])
+        .filter((diagram) => typeof diagram.filePath === 'string' && diagram.filePath.length > 0)
+        .map((diagram) => {
+          const rawDiagramId = diagram.id || diagram.filePath!;
+          const diagramId = rawDiagramId.startsWith(`${projectId}/`)
+            ? rawDiagramId
+            : `${projectId}/${rawDiagramId}`;
+          const entry = {
+            id: diagramId,
+            label: diagram.label || '',
+            filePath: diagram.filePath,
+            diagramType: diagram.diagramType === 'sequence' ? ('sequence' as const) : ('flowchart' as const),
+          };
+          return {
+            ...entry,
+            label: entry.label || deriveLabel(entry),
+          };
+        });
+
+      return {
+        id: projectId,
+        label: project.label || 'Local Diagrams',
+        diagrams,
+      };
+    })
+    .filter((project) => project.diagrams.length > 0);
+}
+
+export default function App({ dataPath }: AppProps) {
   const canvasRef = useRef<Canvas3DHandle>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [dataProjects, setDataProjects] = useState<readonly Project[] | null>(null);
+  const [useBuiltinProjects, setUseBuiltinProjects] = useState(true);
   const chat = useChat();
   const gitLab = useGitLab();
+  const normalizedDataPath = useMemo(() => normalizeDataPath(dataPath), [dataPath]);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    fetch(`${normalizedDataPath}/`, { signal: ac.signal, cache: 'no-store' })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`SysViz data manifest fetch failed: ${response.status}`);
+        }
+        return response.json() as Promise<SysvizDataManifest>;
+      })
+      .then((manifest) => {
+        if (!ac.signal.aborted) {
+          setDataProjects(normalizeDataManifest(manifest));
+          setUseBuiltinProjects(false);
+        }
+      })
+      .catch((err) => {
+        if (!ac.signal.aborted) {
+          console.warn('SysViz data manifest fetch failed:', err);
+          setDataProjects([]);
+          setUseBuiltinProjects(true);
+        }
+      });
+
+    return () => ac.abort();
+  }, [normalizedDataPath]);
 
   const gitLabProjects = useMemo(() =>
     gitLab.manifest?.diagrams.map((diagram) => createGitLabProject(diagram)) ?? [],
     [gitLab.manifest]
   );
 
+  const baseProjects = useMemo(
+    () => useBuiltinProjects ? BUILTIN_PROJECTS : (dataProjects ?? []),
+    [dataProjects, useBuiltinProjects]
+  );
+
   const allProjects = useMemo(
-    () => [...BUILTIN_PROJECTS, ...gitLabProjects],
-    [gitLabProjects]
+    () => [...baseProjects, ...gitLabProjects],
+    [baseProjects, gitLabProjects]
   );
 
   const {
@@ -50,9 +139,9 @@ export default function App() {
       <Canvas3D ref={canvasRef} />
 
       <ProjectSelector
+        projects={allProjects}
         value={selectedProject}
         onChange={handleProjectChange}
-        extraProjects={gitLabProjects}
       />
 
       <DiagramSwitcher
