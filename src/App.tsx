@@ -42,8 +42,12 @@ function normalizeDataManifest(manifest: SysvizDataManifest): Project[] {
       const diagrams = (project.diagrams ?? [])
         .filter((diagram) => typeof diagram.filePath === 'string' && diagram.filePath.length > 0)
         .map((diagram) => {
+          const rawDiagramId = diagram.id || diagram.filePath!;
+          const diagramId = rawDiagramId.startsWith(`${projectId}/`)
+            ? rawDiagramId
+            : `${projectId}/${rawDiagramId}`;
           const entry = {
-            id: diagram.id || diagram.filePath!,
+            id: diagramId,
             label: diagram.label || '',
             filePath: diagram.filePath,
             diagramType: diagram.diagramType === 'sequence' ? ('sequence' as const) : ('flowchart' as const),
@@ -67,6 +71,7 @@ export default function App({ dataPath }: AppProps) {
   const canvasRef = useRef<Canvas3DHandle>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [dataProjects, setDataProjects] = useState<readonly Project[] | null>(null);
+  const [useBuiltinProjects, setUseBuiltinProjects] = useState(true);
   const chat = useChat();
   const gitLab = useGitLab();
   const normalizedDataPath = useMemo(() => normalizeDataPath(dataPath), [dataPath]);
@@ -83,12 +88,14 @@ export default function App({ dataPath }: AppProps) {
       .then((manifest) => {
         if (!ac.signal.aborted) {
           setDataProjects(normalizeDataManifest(manifest));
+          setUseBuiltinProjects(false);
         }
       })
       .catch((err) => {
         if (!ac.signal.aborted) {
           console.warn('SysViz data manifest fetch failed:', err);
           setDataProjects([]);
+          setUseBuiltinProjects(true);
         }
       });
 
@@ -101,8 +108,8 @@ export default function App({ dataPath }: AppProps) {
   );
 
   const baseProjects = useMemo(
-    () => dataProjects && dataProjects.length > 0 ? dataProjects : BUILTIN_PROJECTS,
-    [dataProjects]
+    () => useBuiltinProjects ? BUILTIN_PROJECTS : (dataProjects ?? []),
+    [dataProjects, useBuiltinProjects]
   );
 
   const allProjects = useMemo(
