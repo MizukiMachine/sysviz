@@ -714,6 +714,8 @@ export class ClusterRenderer {
     this.connectionLines.update(delta);
     this.particleTraffic.update(delta);
     this._animateResources(delta);
+    this.scene.updateMatrixWorld(true);
+    this.connectionLines.updateLabelVisibility();
     this.renderer.render(this.scene, this.camera);
   }
 

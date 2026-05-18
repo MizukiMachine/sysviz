@@ -9,10 +9,10 @@ const FLOOR_OPACITY = 0.3;
 const BORDER_OPACITY = 0.5;
 const FALLBACK_PADDING = 0.8;
 const LABEL_MIN_HEIGHT = 1.28;
-const LABEL_VERTICAL_PADDING = 0.9;
+const LABEL_VERTICAL_PADDING = 0.6;
 const LABEL_BASE_Y = 0.72;
 const LABEL_FORWARD_OFFSET = 0.52;
-const TOP_LABEL_Y_OFFSET = 0.1;
+const TOP_LABEL_Y_OFFSET = 0.06;
 
 interface SubgraphEntry {
   group: THREE.Group;
@@ -227,6 +227,7 @@ export class SubgraphRenderer {
         svgBounds?.labelCenterZ ?? cz,
       );
       topLabelPlane.userData.isLabel = true;
+      topLabelPlane.userData.labelRole = 'subgraph';
       topLabelPlane.renderOrder = RENDER_ORDER.CONNECTION_LABEL;
       sgGroup.add(topLabelPlane);
 

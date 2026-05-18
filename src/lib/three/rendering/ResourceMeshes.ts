@@ -18,7 +18,8 @@ import { normalizeLabelText } from './labelUtils.js';
 
 const BASE_COLOR = DEFAULT_NODE_COLOR;
 const TEXT_COLOR = '#1e293b';
-const LABEL_SURFACE_OFFSET = 0.08;
+const TOP_LABEL_SURFACE_OFFSET = 0.06;
+const FRONT_LABEL_SURFACE_OFFSET = 0.12;
 const _labelTextureCache = new Map<string, THREE.CanvasTexture>();
 
 interface LabelSpriteOptions {
@@ -38,6 +39,7 @@ interface MeshUserData {
   halfHeight?: number;
   labelVariant?: 'short' | 'full' | 'data';
   labelAnchor?: THREE.Vector3;
+  labelRole?: 'node' | 'subgraph' | 'edge' | 'particle';
 }
 
 interface LabelTextureOptions {
@@ -50,6 +52,7 @@ interface LabelTextureOptions {
 
 interface LabelPlaneOptions extends LabelTextureOptions {
   scale?: { x: number; y: number; z: number };
+  depthTest?: boolean;
 }
 
 type ResourceGroup = THREE.Group;
@@ -172,6 +175,7 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
     maxTextWidth = width - 32,
     scale = { x: 2.15, y: 0.54, z: 1 },
     fontFamily = LABEL_FONT_FAMILY,
+    depthTest = true,
   } = options;
 
   const texture = getLabelTexture(text, { fontSize, width, height, maxTextWidth, fontFamily });
@@ -181,7 +185,7 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
       map: texture,
       transparent: true,
       opacity: 0.96,
-      depthTest: true,
+      depthTest,
       depthWrite: false,
       polygonOffset: true,
       polygonOffsetFactor: -2,
@@ -191,6 +195,7 @@ function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.
   );
   const userData = plane.userData as MeshUserData;
   userData.isLabel = true;
+  userData.labelRole = 'node';
   plane.renderOrder = RENDER_ORDER.NODE_LABEL;
   return plane;
 }
@@ -226,7 +231,7 @@ function addBoxLabels(group: ResourceGroup, resource: VisualizationNode, width: 
     scale: { x: width * 0.995, y: depth * 0.97, z: 1 },
   });
   topLabel.rotation.x = FLAT_ROTATION_X;
-  topLabel.position.set(0, height / 2 + LABEL_SURFACE_OFFSET, 0);
+  topLabel.position.set(0, height / 2 + TOP_LABEL_SURFACE_OFFSET, 0);
   group.add(topLabel);
 
   const frontLabel = createLabelPlane(labelText, {
@@ -236,7 +241,7 @@ function addBoxLabels(group: ResourceGroup, resource: VisualizationNode, width: 
     maxTextWidth: 1590,
     scale: { x: width * 0.995, y: height * 0.97, z: 1 },
   });
-  frontLabel.position.set(0, 0, depth / 2 + LABEL_SURFACE_OFFSET);
+  frontLabel.position.set(0, 0, depth / 2 + FRONT_LABEL_SURFACE_OFFSET);
   group.add(frontLabel);
 
   const idleY = resource.y || 0;
