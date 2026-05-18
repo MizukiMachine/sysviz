@@ -15,12 +15,14 @@ interface UseVisualizationControllerArgs {
   canvasRef: React.RefObject<Canvas3DHandle | null>;
   projects: readonly Project[];
   gitLabService?: GitLabService | null;
+  refreshToken?: number;
 }
 
 export function useVisualizationController({
   canvasRef,
   projects,
   gitLabService,
+  refreshToken = 0,
 }: UseVisualizationControllerArgs) {
   const fallbackProject = projects[0] ?? BUILTIN_PROJECTS[0];
   const fallbackDiagram = fallbackProject?.diagrams[0] ?? BUILTIN_PROJECTS[0].diagrams[0];
@@ -78,6 +80,16 @@ export function useVisualizationController({
     // Fallback: empty parse
     return parser.parseText('');
   }, [findDiagram, getParser, gitLabService]);
+
+  useEffect(() => {
+    if (refreshToken === 0) return;
+    initializedRef.current = true;
+    setDisabledDiagrams(new Set());
+    setViewCache(new Map());
+    setLabelTranslations(new Map());
+    setTranslationError(null);
+    setRawMmdText('');
+  }, [refreshToken]);
 
   // Initial fetch for default diagram
   useEffect(() => {
@@ -168,7 +180,7 @@ export function useVisualizationController({
     });
 
     return () => ac.abort();
-  }, [selectedProject]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [findProject, selectedProject]);
 
   // Handle diagram switching
   useEffect(() => {

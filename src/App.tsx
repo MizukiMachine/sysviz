@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MessageCircle, RefreshCw } from 'lucide-react';
 import { Canvas3D, type Canvas3DHandle } from './components/Canvas3D';
 import { ProjectSelector } from './components/ProjectSelector';
 import { DiagramSwitcher } from './components/DiagramSwitcher';
+import { InteractionHint } from './components/InteractionHint';
 import { useChat } from './hooks/useChat';
 import { useVisualizationController } from './hooks/useVisualizationController';
 import { BUILTIN_PROJECTS, createGitLabProject, deriveLabel, type Project } from './lib/views/viewRegistry';
@@ -69,26 +70,34 @@ function normalizeDataManifest(manifest: SysvizDataManifest): Project[] {
 
 export default function App({ dataPath }: AppProps) {
   const canvasRef = useRef<Canvas3DHandle>(null);
+  const refreshAbortRef = useRef<AbortController | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [dataProjects, setDataProjects] = useState<readonly Project[] | null>(null);
   const [useBuiltinProjects, setUseBuiltinProjects] = useState(true);
+  const [isRefreshingData, setIsRefreshingData] = useState(false);
+  const [dataRefreshError, setDataRefreshError] = useState<string | null>(null);
+  const [dataRefreshToken, setDataRefreshToken] = useState(0);
   const chat = useChat();
   const gitLab = useGitLab();
   const normalizedDataPath = useMemo(() => normalizeDataPath(dataPath), [dataPath]);
 
+  const loadDataProjects = useCallback(async (signal: AbortSignal): Promise<Project[]> => {
+    const response = await fetch(`${normalizedDataPath}/`, { signal, cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`SysViz data manifest fetch failed: ${response.status}`);
+    }
+    const manifest = await response.json() as SysvizDataManifest;
+    return normalizeDataManifest(manifest);
+  }, [normalizedDataPath]);
+
   useEffect(() => {
     const ac = new AbortController();
-    fetch(`${normalizedDataPath}/`, { signal: ac.signal, cache: 'no-store' })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`SysViz data manifest fetch failed: ${response.status}`);
-        }
-        return response.json() as Promise<SysvizDataManifest>;
-      })
-      .then((manifest) => {
+    loadDataProjects(ac.signal)
+      .then((projects) => {
         if (!ac.signal.aborted) {
-          setDataProjects(normalizeDataManifest(manifest));
+          setDataProjects(projects);
           setUseBuiltinProjects(false);
+          setDataRefreshError(null);
         }
       })
       .catch((err) => {
@@ -96,11 +105,43 @@ export default function App({ dataPath }: AppProps) {
           console.warn('SysViz data manifest fetch failed:', err);
           setDataProjects([]);
           setUseBuiltinProjects(true);
+          setDataRefreshError(err instanceof Error ? err.message : String(err));
         }
       });
 
     return () => ac.abort();
-  }, [normalizedDataPath]);
+  }, [loadDataProjects]);
+
+  useEffect(() => () => {
+    refreshAbortRef.current?.abort();
+  }, []);
+
+  const handleRefreshData = useCallback(async () => {
+    if (isRefreshingData) return;
+    refreshAbortRef.current?.abort();
+    const ac = new AbortController();
+    refreshAbortRef.current = ac;
+    setIsRefreshingData(true);
+    setDataRefreshError(null);
+
+    try {
+      const projects = await loadDataProjects(ac.signal);
+      if (ac.signal.aborted) return;
+      setDataProjects(projects);
+      setUseBuiltinProjects(false);
+      setDataRefreshToken((token) => token + 1);
+    } catch (err) {
+      if (!ac.signal.aborted) {
+        console.warn('SysViz data refresh failed:', err);
+        setDataRefreshError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      if (!ac.signal.aborted) {
+        setIsRefreshingData(false);
+        refreshAbortRef.current = null;
+      }
+    }
+  }, [isRefreshingData, loadDataProjects]);
 
   const gitLabProjects = useMemo(() =>
     gitLab.manifest?.diagrams.map((diagram) => createGitLabProject(diagram)) ?? [],
@@ -132,6 +173,7 @@ export default function App({ dataPath }: AppProps) {
     canvasRef,
     projects: allProjects,
     gitLabService: gitLab.configured ? gitLab.service : null,
+    refreshToken: dataRefreshToken,
   });
 
   return (
@@ -143,6 +185,7 @@ export default function App({ dataPath }: AppProps) {
         value={selectedProject}
         onChange={handleProjectChange}
       />
+      <InteractionHint />
 
       <DiagramSwitcher
         projects={allProjects}
@@ -152,6 +195,22 @@ export default function App({ dataPath }: AppProps) {
         disabledOptions={disabledDiagrams}
         getLabel={getLabel}
       />
+
+      <button
+        onClick={handleRefreshData}
+        disabled={isRefreshingData}
+        type="button"
+        className={`
+          fixed top-5 right-24 z-30 w-14 h-14 flex items-center justify-center rounded-full glass-panel
+          cursor-pointer text-slate-600 hover:text-slate-800 hover:shadow-lg transition-all
+          disabled:cursor-default disabled:opacity-70
+          ${dataRefreshError ? 'ring-2 ring-rose-300/70 text-rose-600' : ''}
+        `}
+        aria-label="Refresh SysViz diagrams"
+        title={dataRefreshError ?? 'Refresh SysViz diagrams'}
+      >
+        <RefreshCw size={23} className={isRefreshingData ? 'animate-spin' : ''} />
+      </button>
 
       {isLoadingView && (
         <div className="fixed left-1/2 -translate-x-1/2 bottom-48 z-20 pointer-events-none select-none">

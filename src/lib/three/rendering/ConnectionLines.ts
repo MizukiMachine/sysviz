@@ -51,8 +51,25 @@ const UNDERLAY_Y_OFFSET = -0.004;
 const UNDERLAY_OPACITY = 0.34;
 const HIGHLIGHT_UNDERLAY_OPACITY = 0.5;
 const HIGHLIGHT_UNDERLAY_Y_OFFSET = -0.007;
+const LABEL_COLLISION_PADDING = 0.08;
+const EDGE_LABEL_HIDE_OVERLAP_RATIO = 0.24;
+const EDGE_LABEL_SHOW_OVERLAP_RATIO = 0.10;
 
 type LineMaterial = THREE.LineDashedMaterial;
+type LabelRole = 'node' | 'subgraph' | 'edge' | 'particle';
+
+interface ScreenRect {
+  minX: number;
+  minZ: number;
+  maxX: number;
+  maxZ: number;
+}
+
+interface LabelUserData {
+  isLabel?: boolean;
+  isConnectionLabel?: boolean;
+  labelRole?: LabelRole;
+}
 
 interface ConnectionEntry {
   underlay: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
@@ -87,6 +104,7 @@ export class ConnectionLineManager {
   connections: Map<string, ConnectionEntry>;
   lineGroup: THREE.Group;
   labelTextures: Map<string, THREE.CanvasTexture>;
+  private _worldPosScratch = new THREE.Vector3();
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -258,6 +276,42 @@ export class ConnectionLineManager {
     }
   }
 
+  updateLabelVisibility(): void {
+    const blockers: ScreenRect[] = [];
+    this.scene.traverse((object) => {
+      const userData = object.userData as LabelUserData;
+      if (
+        (userData.labelRole !== 'node' && userData.labelRole !== 'subgraph')
+        || !this._isObjectVisible(object)
+      ) {
+        return;
+      }
+
+      const rect = this._getObjectTopDownRect(object, LABEL_COLLISION_PADDING);
+      if (rect) blockers.push(rect);
+    });
+
+    for (const entry of this.connections.values()) {
+      const sprite = entry.labelSprite;
+      if (!sprite) continue;
+
+      const rect = this._getSpriteTopDownRect(sprite, LABEL_COLLISION_PADDING);
+      if (!rect) {
+        sprite.visible = false;
+        continue;
+      }
+      const maxOverlap = blockers.reduce(
+        (max, blocker) => Math.max(max, this._overlapRatio(rect, blocker)),
+        0,
+      );
+      if (maxOverlap >= EDGE_LABEL_HIDE_OVERLAP_RATIO) {
+        sprite.visible = false;
+      } else if (maxOverlap <= EDGE_LABEL_SHOW_OVERLAP_RATIO) {
+        sprite.visible = true;
+      }
+    }
+  }
+
   setConnectionActive(connectionId: string, active: boolean): void {
     const entry = this.connections.get(connectionId);
     if (!entry) return;
@@ -290,6 +344,10 @@ export class ConnectionLineManager {
       opacity: 0.88,
       sizeAttenuation: true,
     }));
+    const userData = sprite.userData as LabelUserData;
+    userData.isLabel = true;
+    userData.isConnectionLabel = true;
+    userData.labelRole = 'edge';
     sprite.renderOrder = RENDER_ORDER.CONNECTION_LABEL;
     sprite.position.copy(midpoint);
     sprite.position.y += EDGE_LABEL_Y_OFFSET;
@@ -310,6 +368,105 @@ export class ConnectionLineManager {
     });
     this.labelTextures.set(label, texture);
     return texture;
+  }
+
+  private _isObjectVisible(object: THREE.Object3D): boolean {
+    let current: THREE.Object3D | null = object;
+    while (current) {
+      if (!current.visible) return false;
+      current = current.parent;
+    }
+    return true;
+  }
+
+  private _getObjectTopDownRect(
+    object: THREE.Object3D,
+    padding = 0,
+  ): ScreenRect | null {
+    if (object instanceof THREE.Sprite) {
+      return this._getSpriteTopDownRect(object, padding);
+    }
+
+    if (object instanceof THREE.Mesh && object.geometry) {
+      object.geometry.computeBoundingBox();
+      const bounds = object.geometry.boundingBox;
+      if (!bounds || bounds.isEmpty()) return null;
+
+      const { min, max } = bounds;
+      const points = [
+        new THREE.Vector3(min.x, min.y, min.z).applyMatrix4(object.matrixWorld),
+        new THREE.Vector3(min.x, min.y, max.z).applyMatrix4(object.matrixWorld),
+        new THREE.Vector3(min.x, max.y, min.z).applyMatrix4(object.matrixWorld),
+        new THREE.Vector3(min.x, max.y, max.z).applyMatrix4(object.matrixWorld),
+        new THREE.Vector3(max.x, min.y, min.z).applyMatrix4(object.matrixWorld),
+        new THREE.Vector3(max.x, min.y, max.z).applyMatrix4(object.matrixWorld),
+        new THREE.Vector3(max.x, max.y, min.z).applyMatrix4(object.matrixWorld),
+        new THREE.Vector3(max.x, max.y, max.z).applyMatrix4(object.matrixWorld),
+      ];
+      return this._pointsToTopDownRect(points, padding);
+    }
+
+    const box = new THREE.Box3().setFromObject(object);
+    if (box.isEmpty()) return null;
+    const { min, max } = box;
+    const points = [
+      new THREE.Vector3(min.x, min.y, min.z),
+      new THREE.Vector3(min.x, min.y, max.z),
+      new THREE.Vector3(min.x, max.y, min.z),
+      new THREE.Vector3(min.x, max.y, max.z),
+      new THREE.Vector3(max.x, min.y, min.z),
+      new THREE.Vector3(max.x, min.y, max.z),
+      new THREE.Vector3(max.x, max.y, min.z),
+      new THREE.Vector3(max.x, max.y, max.z),
+    ];
+    return this._pointsToTopDownRect(points, padding);
+  }
+
+  private _getSpriteTopDownRect(
+    sprite: THREE.Sprite,
+    padding = 0,
+  ): ScreenRect | null {
+    sprite.getWorldPosition(this._worldPosScratch);
+    const halfWidth = sprite.scale.x / 2;
+    const halfDepth = sprite.scale.y / 2;
+
+    return {
+      minX: this._worldPosScratch.x - halfWidth - padding,
+      minZ: this._worldPosScratch.z - halfDepth - padding,
+      maxX: this._worldPosScratch.x + halfWidth + padding,
+      maxZ: this._worldPosScratch.z + halfDepth + padding,
+    };
+  }
+
+  private _pointsToTopDownRect(points: THREE.Vector3[], padding: number): ScreenRect | null {
+    let minX = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxZ = -Infinity;
+    for (const point of points) {
+      minX = Math.min(minX, point.x);
+      minZ = Math.min(minZ, point.z);
+      maxX = Math.max(maxX, point.x);
+      maxZ = Math.max(maxZ, point.z);
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minZ) || !Number.isFinite(maxX) || !Number.isFinite(maxZ)) {
+      return null;
+    }
+
+    return {
+      minX: minX - padding,
+      minZ: minZ - padding,
+      maxX: maxX + padding,
+      maxZ: maxZ + padding,
+    };
+  }
+
+  private _overlapRatio(a: ScreenRect, b: ScreenRect): number {
+    const overlapWidth = Math.max(0, Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX));
+    const overlapDepth = Math.max(0, Math.min(a.maxZ, b.maxZ) - Math.max(a.minZ, b.minZ));
+    const area = Math.max((a.maxX - a.minX) * (a.maxZ - a.minZ), 0.0001);
+    return (overlapWidth * overlapDepth) / area;
   }
 
   private _installDashOffsetAnimation(material: THREE.LineDashedMaterial): void {

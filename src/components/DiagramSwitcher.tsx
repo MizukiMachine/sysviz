@@ -23,7 +23,7 @@ export function DiagramSwitcher({
   if (diagrams.length === 0) return null;
 
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 top-7 z-20 flex items-center gap-2 px-3 py-2.5 glass-pill">
+    <div className="fixed left-5 right-5 top-44 z-20 flex items-center justify-center gap-1 overflow-x-visible pointer-events-none sm:left-[240px] sm:right-40 sm:top-7">
       {diagrams.map((diagram) => {
         const isActive = diagram.id === value;
         const isDisabled = disabledOptions?.has(diagram.id);
@@ -34,7 +34,7 @@ export function DiagramSwitcher({
             disabled={isDisabled}
             type="button"
             className={`
-              h-11 px-5 rounded-full text-sm font-medium whitespace-nowrap
+              h-9 px-2.5 rounded-full text-xs font-medium whitespace-nowrap pointer-events-auto
               cursor-pointer transition-all duration-140 ease-in-out
               ${
                 isActive

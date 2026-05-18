@@ -49,10 +49,6 @@ export function useChat() {
       rawMmdText: string = '',
     ) => {
       const config = getActiveConfig(settings);
-      if (!config) {
-        setError('APIキーが設定されていません。設定画面でAPIキーを入力してください。');
-        return;
-      }
 
       abortRef.current?.abort();
       const previousMessages = messagesRef.current;

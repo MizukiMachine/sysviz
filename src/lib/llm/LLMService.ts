@@ -10,12 +10,24 @@ export interface StreamCallbacks {
 }
 
 export interface LLMConfig {
-  apiKey: string;
+  apiKey?: string;
   model: string;
   baseUrl: string;
 }
 
 const GLM_URL = '/api/glm';
+
+function buildHeaders(config: LLMConfig): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+  };
+  if (config.apiKey) {
+    headers['x-api-key'] = config.apiKey;
+  }
+  return headers;
+}
 
 async function generateGLM(
   config: LLMConfig,
@@ -25,12 +37,7 @@ async function generateGLM(
 ): Promise<string> {
   const response = await fetch(`${config.baseUrl || GLM_URL}/v1/messages`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: buildHeaders(config),
     body: JSON.stringify({
       model: config.model,
       max_tokens: 4096,
@@ -60,12 +67,7 @@ async function streamGLM(
   try {
     response = await fetch(`${config.baseUrl || GLM_URL}/v1/messages`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': config.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
+      headers: buildHeaders(config),
       body: JSON.stringify({
         model: config.model,
         max_tokens: 4096,

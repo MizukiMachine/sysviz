@@ -36,8 +36,8 @@ export const CLUSTER_NODE_MARGIN_X = 2.0;
 export const CLUSTER_NODE_MARGIN_Z = 1.2;
 
 // ── Scene ────────────────────────────────────────────────────────────────
-export const BACKGROUND_COLOR = 0xfafafa;
-export const FOG_COLOR = 0xffffff;
+export const BACKGROUND_COLOR = 0xfaf7f2;
+export const FOG_COLOR = 0xfaf7f2;
 export const FOG_DENSITY = 0.005;
 
 // ── Render order layers ──────────────────────────────────────────────────

@@ -53,23 +53,13 @@ export function SettingsDialog({
             <div className="mb-4">
               <h3 className="text-sm font-semibold text-slate-800">LLM</h3>
               <p className="mt-1 text-xs text-slate-500">
-                チャットとキャプション補完に使う GLM API の設定です。
+                Contrail サーバー側の ZAI GLM API キーを自動的に使います。
               </p>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                API Key
-              </label>
-              <input
-                type="password"
-                value={form.apiKey}
-                onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-                placeholder="sk-..."
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200/60 bg-white/60 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-400/50 font-mono"
-              />
+            <div className="rounded-xl border border-slate-200/60 bg-slate-50/70 px-4 py-3 text-[11px] leading-5 text-slate-500">
+              APIキーはブラウザに保存せず、`ZAI_API_KEY` が設定された Contrail の `/api/glm` プロキシ経由で送信します。
             </div>
-
           </section>
 
           <section>

@@ -102,7 +102,9 @@ export class SequenceParticipantRenderer {
         }),
       );
       topLabel.rotation.x = FLAT_ROTATION_X;
-      topLabel.position.set(participant.x, participant.height + 0.03, participant.z);
+      topLabel.position.set(participant.x, participant.height + 0.025, participant.z);
+      topLabel.userData.isLabel = true;
+      topLabel.userData.labelRole = 'node';
       topLabel.renderOrder = RENDER_ORDER.NODE_LABEL;
       group.add(topLabel);
 
@@ -118,9 +120,11 @@ export class SequenceParticipantRenderer {
       );
       frontLabel.position.set(
         participant.x,
-        participant.height * 0.52,
+        participant.height * 0.45,
         participant.z + participant.depth / 2 + 0.03,
       );
+      frontLabel.userData.isLabel = true;
+      frontLabel.userData.labelRole = 'node';
       frontLabel.renderOrder = RENDER_ORDER.NODE_LABEL;
       group.add(frontLabel);
 
