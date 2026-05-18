@@ -27,8 +27,10 @@ const HIGHLIGHT_COLOR = CLUSTER_HIGHLIGHT_COLOR;
 const SELECT_COLOR = CLUSTER_SELECT_COLOR;
 const LABEL_FULL_DISTANCE = 18;
 const LABEL_SHORT_DISTANCE = 34;
+const PAN_AXIS_LOCK_THRESHOLD = 6;
 
 type MeshEffect = 'default' | 'selected' | 'hovered';
+type PanAxis = 'horizontal' | 'vertical';
 type PickableObject = THREE.Object3D;
 
 interface CameraTargetAnimation {
@@ -87,6 +89,10 @@ export class ClusterRenderer {
   mouse: THREE.Vector2;
   _clickStart: THREE.Vector2;
   _didDrag: boolean;
+  _isRightPanning: boolean;
+  _rightPanStart: THREE.Vector2;
+  _rightPanLast: THREE.Vector2;
+  _rightPanAxis: PanAxis | null;
   running: boolean;
   frameId: number | null;
   lastFrameTime: number;
@@ -109,6 +115,10 @@ export class ClusterRenderer {
     this.mouse = new THREE.Vector2(-999, -999);
     this._clickStart = new THREE.Vector2();
     this._didDrag = false;
+    this._isRightPanning = false;
+    this._rightPanStart = new THREE.Vector2();
+    this._rightPanLast = new THREE.Vector2();
+    this._rightPanAxis = null;
     this.running = false;
     this.frameId = null;
     this.lastFrameTime = 0;
@@ -179,7 +189,6 @@ export class ClusterRenderer {
     this.controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
       MIDDLE: THREE.MOUSE.DOLLY,
-      RIGHT: THREE.MOUSE.PAN,
     };
     this.controls.touches = {
       ONE: THREE.TOUCH.ROTATE,
@@ -187,6 +196,15 @@ export class ClusterRenderer {
     };
     this._initialCameraTarget.copy(this.controls.target);
     this.controls.update();
+    this._lockCameraAzimuth();
+  }
+
+  private _unlockCameraAzimuth(): void {
+    this.controls.minAzimuthAngle = -Infinity;
+    this.controls.maxAzimuthAngle = Infinity;
+  }
+
+  private _lockCameraAzimuth(): void {
     const lockedAzimuth = this.controls.getAzimuthalAngle();
     this.controls.minAzimuthAngle = lockedAzimuth;
     this.controls.maxAzimuthAngle = lockedAzimuth;
@@ -245,6 +263,11 @@ export class ClusterRenderer {
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
+    if (this._isRightPanning) {
+      this._handleRightPanMove(event);
+      return;
+    }
+
     const dx = event.clientX - this._clickStart.x;
     const dy = event.clientY - this._clickStart.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -260,14 +283,86 @@ export class ClusterRenderer {
     if (event.button === 0) {
       this._clickStart.set(event.clientX, event.clientY);
       this._didDrag = false;
+    } else if (event.button === 2) {
+      this._clickStart.set(event.clientX, event.clientY);
+      this._rightPanStart.set(event.clientX, event.clientY);
+      this._rightPanLast.set(event.clientX, event.clientY);
+      this._rightPanAxis = null;
+      this._isRightPanning = true;
+      this._didDrag = false;
+      this.canvas.style.cursor = 'grabbing';
+      event.preventDefault();
     }
   }
 
   _handleMouseUp(event: MouseEvent): void {
+    if (event.button === 2 && this._isRightPanning) {
+      this._finishRightPan(event);
+      return;
+    }
+
     if (event.button === 0 && !this._didDrag) {
       this._performPick(true);
     }
     this._didDrag = false;
+  }
+
+  _handleRightPanMove(event: MouseEvent): void {
+    event.preventDefault();
+
+    const totalDx = event.clientX - this._rightPanStart.x;
+    const totalDy = event.clientY - this._rightPanStart.y;
+    const totalDistance = Math.hypot(totalDx, totalDy);
+    if (totalDistance > 4) {
+      this._cameraTargetAnimation = null;
+      this._didDrag = true;
+    }
+
+    if (!this._rightPanAxis) {
+      if (totalDistance < PAN_AXIS_LOCK_THRESHOLD) return;
+      this._rightPanAxis = Math.abs(totalDx) >= Math.abs(totalDy) ? 'horizontal' : 'vertical';
+    }
+
+    let deltaX = event.clientX - this._rightPanLast.x;
+    let deltaY = event.clientY - this._rightPanLast.y;
+    if (this._rightPanAxis === 'horizontal') {
+      deltaY = 0;
+    } else {
+      deltaX = 0;
+    }
+
+    this._rightPanLast.set(event.clientX, event.clientY);
+    if (deltaX === 0 && deltaY === 0) return;
+
+    this._panCameraByScreenDelta(deltaX, deltaY);
+  }
+
+  _finishRightPan(event: MouseEvent): void {
+    event.preventDefault();
+    this._isRightPanning = false;
+    this._rightPanAxis = null;
+    this.canvas.style.cursor = this.hoveredResource ? 'pointer' : 'default';
+    this._didDrag = false;
+  }
+
+  _panCameraByScreenDelta(deltaX: number, deltaY: number): void {
+    const elementHeight = Math.max(this.canvas.clientHeight, 1);
+    const offset = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
+    const targetDistance = offset.length() * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const panOffset = new THREE.Vector3();
+
+    if (deltaX !== 0) {
+      const distance = 2 * deltaX * targetDistance / elementHeight;
+      panOffset.add(new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0).multiplyScalar(-distance));
+    }
+    if (deltaY !== 0) {
+      const distance = 2 * deltaY * targetDistance / elementHeight;
+      panOffset.add(new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 1).multiplyScalar(distance));
+    }
+
+    this.camera.position.add(panOffset);
+    this.controls.target.add(panOffset);
+    this.controls.update();
   }
 
   _handleResize(): void {
@@ -513,11 +608,13 @@ export class ClusterRenderer {
     const position = new THREE.Vector3(...cameraView.position);
     const target = new THREE.Vector3(...cameraView.target);
     this._cameraTargetAnimation = null;
+    this._unlockCameraAzimuth();
     this.camera.position.copy(position);
     this.controls.target.copy(target);
     this.camera.lookAt(target);
     this.camera.updateProjectionMatrix();
     this.controls.update();
+    this._lockCameraAzimuth();
     this._initialCameraPosition.copy(this.camera.position);
     this._initialCameraTarget.copy(this.controls.target);
   }
@@ -556,11 +653,13 @@ export class ClusterRenderer {
 
     this.controls.maxDistance = Math.max(CONTROLS_MAX_DISTANCE, position.distanceTo(target) * 2);
     this.camera.far = Math.max(CAMERA_FAR, position.distanceTo(target) * 4);
+    this._unlockCameraAzimuth();
     this.camera.position.copy(position);
     this.controls.target.copy(target);
     this.camera.lookAt(target);
     this.camera.updateProjectionMatrix();
     this.controls.update();
+    this._lockCameraAzimuth();
 
     this._initialCameraPosition.copy(this.camera.position);
     this._initialCameraTarget.copy(this.controls.target);

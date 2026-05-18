@@ -3,6 +3,7 @@ import { MessageCircle } from 'lucide-react';
 import { Canvas3D, type Canvas3DHandle } from './components/Canvas3D';
 import { ProjectSelector } from './components/ProjectSelector';
 import { DiagramSwitcher } from './components/DiagramSwitcher';
+import { InteractionHint } from './components/InteractionHint';
 import { useChat } from './hooks/useChat';
 import { useVisualizationController } from './hooks/useVisualizationController';
 import { BUILTIN_PROJECTS, createGitLabProject, deriveLabel, type Project } from './lib/views/viewRegistry';
@@ -143,6 +144,7 @@ export default function App({ dataPath }: AppProps) {
         value={selectedProject}
         onChange={handleProjectChange}
       />
+      <InteractionHint />
 
       <DiagramSwitcher
         projects={allProjects}
