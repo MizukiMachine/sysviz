@@ -1,12 +1,11 @@
 const STORAGE_KEY = 'sysviz-llm-settings';
 
 export interface LLMSettings {
-  apiKey: string;
+  apiKey?: string;
   model: string;
 }
 
 export const DEFAULT_SETTINGS: LLMSettings = {
-  apiKey: '',
   model: 'glm-5.1',
 };
 
@@ -20,11 +19,10 @@ export const loadSettings = (): LLMSettings => {
 
     // Migrate old multi-provider format
     if (parsed.glm) {
-      return { apiKey: parsed.glm.apiKey || '', model: parsed.glm.model || DEFAULT_SETTINGS.model };
+      return { model: parsed.glm.model || DEFAULT_SETTINGS.model };
     }
 
     return {
-      apiKey: parsed.apiKey || DEFAULT_SETTINGS.apiKey,
       model: parsed.model || DEFAULT_SETTINGS.model,
     };
   } catch {
@@ -33,13 +31,12 @@ export const loadSettings = (): LLMSettings => {
 };
 
 export const saveSettings = (settings: LLMSettings) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ model: settings.model }));
 };
 
 export const getActiveConfig = (settings: LLMSettings) => {
-  if (!settings.apiKey) return null;
   return {
-    apiKey: settings.apiKey,
+    apiKey: settings.apiKey || undefined,
     model: settings.model,
     baseUrl: GLM_BASE_URL,
   };
