@@ -6,7 +6,6 @@ import { ParticleTrafficSystem } from './ParticleTraffic.js';
 import type { ClusterBounds, VisualizationCamera, VisualizationConnection, VisualizationNode, VisualizationRoute, VisualizationResourceStatus } from '@/types/visualization';
 import {
   CAMERA_FOV,
-  CAMERA_FRAME_PADDING,
   CAMERA_NEAR,
   CAMERA_FAR,
   CONTROLS_MIN_DISTANCE,
@@ -15,8 +14,6 @@ import {
   FOG_COLOR,
   FOG_DENSITY,
   DEFAULT_HALF_HEIGHT,
-  CAMERA_BOUNDS_PADDING,
-  CAMERA_MIN_SPAN,
   CLUSTER_HIGHLIGHT_COLOR,
   CLUSTER_SELECT_COLOR,
 } from './constants.js';
@@ -93,19 +90,27 @@ export class ClusterRenderer {
   _rightPanStart: THREE.Vector2;
   _rightPanLast: THREE.Vector2;
   _rightPanAxis: PanAxis | null;
+  _hoverDirty: boolean;
   running: boolean;
-  frameId: number | null;
   lastFrameTime: number;
   _initialCameraPosition: THREE.Vector3;
   _initialCameraTarget: THREE.Vector3;
   _cameraTargetAnimation: CameraTargetAnimation | null;
+  _cameraOffset: THREE.Vector3;
+  _panOffset: THREE.Vector3;
+  _panCameraRight: THREE.Vector3;
+  _panCameraUp: THREE.Vector3;
+  _labelToCamera: THREE.Vector3;
+  _labelHorizontal: THREE.Vector3;
   onSelect: ((resourceId: string | null) => void) | null;
   onHover: ((resourceId: string | null) => void) | null;
   _onMouseMove!: (event: MouseEvent) => void;
   _onMouseDown!: (event: MouseEvent) => void;
   _onMouseUp!: (event: MouseEvent) => void;
   _onResize!: () => void;
+  _onControlsChange!: () => void;
   _onContextMenu!: (event: MouseEvent) => void;
+  _resizeObserver: ResizeObserver | null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -119,14 +124,21 @@ export class ClusterRenderer {
     this._rightPanStart = new THREE.Vector2();
     this._rightPanLast = new THREE.Vector2();
     this._rightPanAxis = null;
+    this._hoverDirty = false;
     this.running = false;
-    this.frameId = null;
     this.lastFrameTime = 0;
     this._initialCameraPosition = new THREE.Vector3();
     this._initialCameraTarget = new THREE.Vector3();
     this._cameraTargetAnimation = null;
+    this._cameraOffset = new THREE.Vector3();
+    this._panOffset = new THREE.Vector3();
+    this._panCameraRight = new THREE.Vector3();
+    this._panCameraUp = new THREE.Vector3();
+    this._labelToCamera = new THREE.Vector3();
+    this._labelHorizontal = new THREE.Vector3();
     this.onSelect = null;
     this.onHover = null;
+    this._resizeObserver = null;
     this.pickableObjects = [];
     this.meshFactory = new ResourceMeshFactory();
 
@@ -142,6 +154,14 @@ export class ClusterRenderer {
     this._bindEvents();
   }
 
+  _getCanvasSize(): { width: number; height: number; pixelRatio: number } {
+    return {
+      width: Math.max(1, Math.floor(this.canvas.clientWidth || window.innerWidth || 1)),
+      height: Math.max(1, Math.floor(this.canvas.clientHeight || window.innerHeight || 1)),
+      pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+    };
+  }
+
   _initScene(): void {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(SCENE_BG);
@@ -149,7 +169,8 @@ export class ClusterRenderer {
   }
 
   _initCamera(): void {
-    const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+    const { width, height } = this._getCanvasSize();
+    const aspect = width / height;
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, aspect, CAMERA_NEAR, CAMERA_FAR);
     this.camera.position.set(2.5, 6, 14);
     this.camera.lookAt(2.5, 0, 0);
@@ -157,14 +178,16 @@ export class ClusterRenderer {
   }
 
   _initRenderer(): void {
+    const { width, height, pixelRatio } = this._getCanvasSize();
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       antialias: true,
       alpha: false,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer.setSize(width, height, false);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -196,6 +219,10 @@ export class ClusterRenderer {
     };
     this._initialCameraTarget.copy(this.controls.target);
     this.controls.update();
+    this._onControlsChange = () => {
+      this._hoverDirty = true;
+    };
+    this.controls.addEventListener('change', this._onControlsChange);
     this._lockCameraAzimuth();
   }
 
@@ -256,12 +283,19 @@ export class ClusterRenderer {
     this.canvas.addEventListener('mouseup', this._onMouseUp);
     this.canvas.addEventListener('contextmenu', this._onContextMenu);
     window.addEventListener('resize', this._onResize);
+    if (typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver(() => this._handleResize());
+      this._resizeObserver.observe(this.canvas);
+    }
   }
 
   _handleMouseMove(event: MouseEvent): void {
     const rect = this.canvas.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    const width = Math.max(rect.width, 1);
+    const height = Math.max(rect.height, 1);
+    this.mouse.x = ((event.clientX - rect.left) / width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / height) * 2 + 1;
+    this._hoverDirty = true;
 
     if (this._isRightPanning) {
       this._handleRightPanMove(event);
@@ -343,21 +377,22 @@ export class ClusterRenderer {
     this._rightPanAxis = null;
     this.canvas.style.cursor = this.hoveredResource ? 'pointer' : 'default';
     this._didDrag = false;
+    this._hoverDirty = true;
   }
 
   _panCameraByScreenDelta(deltaX: number, deltaY: number): void {
-    const elementHeight = Math.max(this.canvas.clientHeight, 1);
-    const offset = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
+    const { height: elementHeight } = this._getCanvasSize();
+    const offset = this._cameraOffset.subVectors(this.camera.position, this.controls.target);
     const targetDistance = offset.length() * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const panOffset = new THREE.Vector3();
+    const panOffset = this._panOffset.set(0, 0, 0);
 
     if (deltaX !== 0) {
       const distance = 2 * deltaX * targetDistance / elementHeight;
-      panOffset.add(new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 0).multiplyScalar(-distance));
+      panOffset.add(this._panCameraRight.setFromMatrixColumn(this.camera.matrix, 0).multiplyScalar(-distance));
     }
     if (deltaY !== 0) {
       const distance = 2 * deltaY * targetDistance / elementHeight;
-      panOffset.add(new THREE.Vector3().setFromMatrixColumn(this.camera.matrix, 1).multiplyScalar(distance));
+      panOffset.add(this._panCameraUp.setFromMatrixColumn(this.camera.matrix, 1).multiplyScalar(distance));
     }
 
     this.camera.position.add(panOffset);
@@ -366,11 +401,12 @@ export class ClusterRenderer {
   }
 
   _handleResize(): void {
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
-    this.renderer.setSize(width, height);
+    const { width, height, pixelRatio } = this._getCanvasSize();
+    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    this._hoverDirty = true;
   }
 
   _performPick(isClick: boolean): void {
@@ -536,6 +572,7 @@ export class ClusterRenderer {
     this.scene.add(group);
     this.resourceMeshes.set(resource.id, group);
     this._rebuildPickableList();
+    this._hoverDirty = true;
   }
 
   removeResource(resourceId: string): void {
@@ -547,6 +584,7 @@ export class ClusterRenderer {
 
     this.resourceMeshes.delete(resourceId);
     this._rebuildPickableList();
+    this._hoverDirty = true;
 
     if (this.selectedResource === resourceId) this._setSelected(null);
     if (this.hoveredResource === resourceId) this._setHovered(null);
@@ -557,12 +595,16 @@ export class ClusterRenderer {
     if (!group) return;
 
     if (resource.x !== undefined) group.position.x = resource.x;
-    if (resource.y !== undefined) group.position.y = resource.y;
+    if (resource.y !== undefined) {
+      const halfHeight = (group.userData as ResourceUserData & { halfHeight?: number }).halfHeight ?? DEFAULT_HALF_HEIGHT;
+      group.position.y = resource.y + halfHeight;
+    }
     if (resource.z !== undefined) group.position.z = resource.z;
 
     if (resource.status) {
       this.meshFactory.updateStatus(group, resource.status);
     }
+    this._hoverDirty = true;
   }
 
   setResourceStatus(resourceId: string, status: VisualizationResourceStatus): void {
@@ -684,30 +726,27 @@ export class ClusterRenderer {
     if (this.running) return;
     this.running = true;
     this.lastFrameTime = performance.now();
-    this._animate();
+    this.renderer.setAnimationLoop(() => this._animate());
   }
 
   stop(): void {
     this.running = false;
-    if (this.frameId) {
-      cancelAnimationFrame(this.frameId);
-      this.frameId = null;
-    }
+    this.renderer.setAnimationLoop(null);
   }
 
   _animate(): void {
     if (!this.running) return;
-    this.frameId = requestAnimationFrame(() => this._animate());
 
     const now = performance.now();
-    const delta = (now - this.lastFrameTime) / 1000;
+    const delta = Math.min((now - this.lastFrameTime) / 1000, 0.05);
     this.lastFrameTime = now;
 
     this._updateCameraTargetAnimation(now);
     this.controls.update();
 
-    if (!this._didDrag) {
+    if (!this._didDrag && this._hoverDirty) {
       this._performPick(false);
+      this._hoverDirty = false;
     }
 
     this.connectionLines.updatePositions(this.resourceMeshes, this.clusterBounds);
@@ -767,8 +806,13 @@ export class ClusterRenderer {
     if (labels.dataIn) labels.dataIn.visible = showFull;
     if (labels.dataOut) labels.dataOut.visible = showFull;
 
-    const toCamera = new THREE.Vector3().subVectors(this.camera.position, group.position);
-    const horizontal = new THREE.Vector3(toCamera.x, 0, toCamera.z).normalize();
+    const toCamera = this._labelToCamera.subVectors(this.camera.position, group.position);
+    const horizontal = this._labelHorizontal.set(toCamera.x, 0, toCamera.z);
+    if (horizontal.lengthSq() > 0.0001) {
+      horizontal.normalize();
+    } else {
+      horizontal.set(0, 0, 1);
+    }
     const forwardOffset = showFull ? 0.9 : showShort ? 0.72 : 0.58;
     this._setLabelPosition(labels.shortName, horizontal, forwardOffset);
     this._setLabelPosition(labels.fullName, horizontal, forwardOffset);
@@ -831,6 +875,7 @@ export class ClusterRenderer {
 
   dispose(): void {
     this.stop();
+    this.controls.removeEventListener('change', this._onControlsChange);
     this.controls.dispose();
 
     this.canvas.removeEventListener('mousemove', this._onMouseMove);
@@ -838,6 +883,8 @@ export class ClusterRenderer {
     this.canvas.removeEventListener('mouseup', this._onMouseUp);
     this.canvas.removeEventListener('contextmenu', this._onContextMenu);
     window.removeEventListener('resize', this._onResize);
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = null;
 
     for (const id of [...this.resourceMeshes.keys()]) {
       this.removeResource(id);

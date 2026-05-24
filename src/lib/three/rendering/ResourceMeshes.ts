@@ -20,7 +20,6 @@ const BASE_COLOR = DEFAULT_NODE_COLOR;
 const TEXT_COLOR = '#1e293b';
 const TOP_LABEL_SURFACE_OFFSET = 0.06;
 const FRONT_LABEL_SURFACE_OFFSET = 0.12;
-const _labelTextureCache = new Map<string, THREE.CanvasTexture>();
 
 interface LabelSpriteOptions {
   fontSize?: number;
@@ -135,11 +134,6 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
     maxTextWidth = width - 32,
     fontFamily = LABEL_FONT_FAMILY,
   } = options;
-  const cacheKey = JSON.stringify({ text, fontSize, width, height, maxTextWidth, fontFamily });
-
-  let texture = _labelTextureCache.get(cacheKey);
-  if (texture) return texture;
-
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -162,9 +156,7 @@ function getLabelTexture(text: string, options: LabelTextureOptions = {}): THREE
   }
   ctx.shadowBlur = 0;
 
-  texture = createCanvasTexture(canvas);
-  _labelTextureCache.set(cacheKey, texture);
-  return texture;
+  return createCanvasTexture(canvas);
 }
 
 function createLabelPlane(text: string, options: LabelPlaneOptions = {}): THREE.Mesh {

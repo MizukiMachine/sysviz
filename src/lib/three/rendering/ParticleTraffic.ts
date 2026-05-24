@@ -85,6 +85,7 @@ interface StoredRoute {
   requestRate: number;
   color: THREE.Color;
   active: boolean;
+  length: number;
 }
 
 class Particle {
@@ -260,6 +261,7 @@ export class ParticleTrafficSystem {
     this.routes.set(trafficRoute.id, {
       id: trafficRoute.id,
       curve,
+      length: Math.max(curve.getLength(), 0.001),
       sourceId: trafficRoute.sourceId,
       targetId: trafficRoute.targetId,
       sourcePos: trafficRoute.sourcePos,
@@ -300,12 +302,16 @@ export class ParticleTrafficSystem {
     if (updates.targetPos !== undefined) route.targetPos = updates.targetPos;
     if (updates.pathPoints !== undefined) route.pathPoints = updates.pathPoints;
     if (updates.sourcePos || updates.targetPos || updates.pathPoints) {
-      route.curve = this._buildCurve({
+      const nextCurve = this._buildCurve({
         sourcePos: route.sourcePos,
         targetPos: route.targetPos,
         pathPoints: route.pathPoints,
         ...route,
-      }) || route.curve;
+      });
+      if (nextCurve) {
+        route.curve = nextCurve;
+        route.length = Math.max(nextCurve.getLength(), 0.001);
+      }
     }
   }
 
@@ -433,7 +439,7 @@ export class ParticleTrafficSystem {
         continue;
       }
 
-      particle.progress += (particle.speed * delta) / route.curve.getLength();
+      particle.progress += (particle.speed * delta) / route.length;
 
       if (particle.progress >= 1.0) {
         this._deactivateParticle(particle);

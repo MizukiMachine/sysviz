@@ -11,7 +11,6 @@ const FALLBACK_PADDING = 0.8;
 const LABEL_MIN_HEIGHT = 1.28;
 const LABEL_VERTICAL_PADDING = 0.6;
 const LABEL_BASE_Y = 0.72;
-const LABEL_FORWARD_OFFSET = 0.52;
 const TOP_LABEL_Y_OFFSET = 0.06;
 
 interface SubgraphEntry {
@@ -212,14 +211,9 @@ export class SubgraphRenderer {
         side: THREE.DoubleSide,
       });
       const labelX = svgBounds?.labelCenterX ?? cx;
-      const labelZBase = svgBounds?.labelCenterZ ?? cz + depth / 2 - planeH * 0.15;
       const labelY = Math.max(LABEL_BASE_Y, topY + LABEL_VERTICAL_PADDING);
-      void labelZBase;
-      void labelY;
 
-      const topLabelPlane = new THREE.Mesh(labelGeo.clone(), labelMat.clone());
-      const topLabelMaterial = topLabelPlane.material as THREE.MeshBasicMaterial;
-      topLabelMaterial.map = floorTex;
+      const topLabelPlane = new THREE.Mesh(labelGeo, labelMat);
       topLabelPlane.rotation.x = FLAT_ROTATION_X;
       topLabelPlane.position.set(
         labelX,
