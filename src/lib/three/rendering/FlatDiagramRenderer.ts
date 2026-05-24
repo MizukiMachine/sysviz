@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 import type { VisualizationFlatDiagram } from '@/types/visualization';
-import { disposeObject3D } from './threeUtils';
+import { disposeObject3D } from './threeUtils.js';
 import { FLAT_ROTATION_X } from './constants.js';
 
 const BASE_Y = 0.02;
 
 interface FlatDiagramEntry {
   group: THREE.Group;
-  texture: THREE.Texture;
 }
 
 export class FlatDiagramRenderer {
@@ -59,7 +58,7 @@ export class FlatDiagramRenderer {
     group.add(plane);
     this._clearCurrent();
     this.group.add(group);
-    this.current = { group, texture };
+    this.current = { group };
   }
 
   clear(): void {
@@ -75,7 +74,6 @@ export class FlatDiagramRenderer {
   private _clearCurrent(): void {
     if (!this.current) return;
     this.group.remove(this.current.group);
-    this._disposeTexture(this.current.texture);
     disposeObject3D(this.current.group);
     this.current = null;
   }

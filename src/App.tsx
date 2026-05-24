@@ -79,6 +79,7 @@ export default function App({ dataPath }: AppProps) {
   const [dataRefreshToken, setDataRefreshToken] = useState(0);
   const chat = useChat();
   const gitLab = useGitLab();
+  const hasExternalDataPath = Boolean(dataPath);
   const normalizedDataPath = useMemo(() => normalizeDataPath(dataPath), [dataPath]);
 
   const loadDataProjects = useCallback(async (signal: AbortSignal): Promise<Project[]> => {
@@ -91,6 +92,13 @@ export default function App({ dataPath }: AppProps) {
   }, [normalizedDataPath]);
 
   useEffect(() => {
+    if (!hasExternalDataPath) {
+      setDataProjects(null);
+      setUseBuiltinProjects(true);
+      setDataRefreshError(null);
+      return;
+    }
+
     const ac = new AbortController();
     loadDataProjects(ac.signal)
       .then((projects) => {
@@ -110,14 +118,14 @@ export default function App({ dataPath }: AppProps) {
       });
 
     return () => ac.abort();
-  }, [loadDataProjects]);
+  }, [hasExternalDataPath, loadDataProjects]);
 
   useEffect(() => () => {
     refreshAbortRef.current?.abort();
   }, []);
 
   const handleRefreshData = useCallback(async () => {
-    if (isRefreshingData) return;
+    if (isRefreshingData || !hasExternalDataPath) return;
     refreshAbortRef.current?.abort();
     const ac = new AbortController();
     refreshAbortRef.current = ac;
@@ -141,7 +149,7 @@ export default function App({ dataPath }: AppProps) {
         refreshAbortRef.current = null;
       }
     }
-  }, [isRefreshingData, loadDataProjects]);
+  }, [hasExternalDataPath, isRefreshingData, loadDataProjects]);
 
   const gitLabProjects = useMemo(() =>
     gitLab.manifest?.diagrams.map((diagram) => createGitLabProject(diagram)) ?? [],
@@ -196,21 +204,23 @@ export default function App({ dataPath }: AppProps) {
         getLabel={getLabel}
       />
 
-      <button
-        onClick={handleRefreshData}
-        disabled={isRefreshingData}
-        type="button"
-        className={`
-          fixed top-5 right-24 z-30 w-14 h-14 flex items-center justify-center rounded-full glass-panel
-          cursor-pointer text-slate-600 hover:text-slate-800 hover:shadow-lg transition-all
-          disabled:cursor-default disabled:opacity-70
-          ${dataRefreshError ? 'ring-2 ring-rose-300/70 text-rose-600' : ''}
-        `}
-        aria-label="Refresh SysViz diagrams"
-        title={dataRefreshError ?? 'Refresh SysViz diagrams'}
-      >
-        <RefreshCw size={23} className={isRefreshingData ? 'animate-spin' : ''} />
-      </button>
+      {hasExternalDataPath && (
+        <button
+          onClick={handleRefreshData}
+          disabled={isRefreshingData}
+          type="button"
+          className={`
+            ui-focus-ring fixed top-5 right-24 z-30 w-14 h-14 flex items-center justify-center rounded-full glass-panel
+            cursor-pointer text-slate-600 hover:text-slate-800 hover:shadow-lg transition-all
+            disabled:cursor-default disabled:opacity-70
+            ${dataRefreshError ? 'ring-2 ring-rose-300/70 text-rose-600' : ''}
+          `}
+          aria-label="Refresh SysViz diagrams"
+          title={dataRefreshError ?? 'Refresh SysViz diagrams'}
+        >
+          <RefreshCw size={23} className={isRefreshingData ? 'animate-spin' : ''} />
+        </button>
+      )}
 
       {isLoadingView && (
         <div className="fixed left-1/2 -translate-x-1/2 bottom-48 z-20 pointer-events-none select-none">
@@ -226,8 +236,9 @@ export default function App({ dataPath }: AppProps) {
       {/* Chat toggle button */}
       {!isChatOpen && (
         <button
+          type="button"
           onClick={() => setIsChatOpen(true)}
-          className="fixed top-5 right-5 z-30 w-14 h-14 flex items-center justify-center rounded-full glass-panel cursor-pointer text-slate-600 hover:text-slate-800 hover:shadow-lg transition-all"
+          className="ui-focus-ring fixed top-5 right-5 z-30 w-14 h-14 flex items-center justify-center rounded-full glass-panel cursor-pointer text-slate-600 hover:text-slate-800 hover:shadow-lg transition-all"
           aria-label="Open chat"
         >
           <MessageCircle size={24} />
