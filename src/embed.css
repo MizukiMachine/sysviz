@@ -34,6 +34,155 @@
   height: 100%;
   overflow: hidden;
   background: #faf7f2;
+  font-family: inherit;
+  --font-sans: inherit;
+  --default-font-family: inherit;
+}
+
+/* Keep Contrail's typeface while preserving SysViz's own type scale.
+   Contrail ships unlayered form-control font rules, so these embedded
+   utility mirrors must also be unlayered to avoid being flattened. */
+.sysviz-container .font-sans {
+  font-family: inherit;
+}
+
+.sysviz-container .text-xs {
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+}
+
+.sysviz-container .text-sm {
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+}
+
+.sysviz-container .text-base {
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
+}
+
+.sysviz-container .text-lg {
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+}
+
+.sysviz-container .text-xl {
+  font-size: var(--text-xl);
+  line-height: var(--text-xl--line-height);
+}
+
+.sysviz-container .text-\[10px\] {
+  font-size: 10px;
+}
+
+.sysviz-container .text-\[11px\] {
+  font-size: 11px;
+}
+
+.sysviz-container .text-\[15px\] {
+  font-size: 15px;
+}
+
+.sysviz-container .leading-4 {
+  line-height: calc(var(--spacing) * 4);
+}
+
+.sysviz-container .leading-5 {
+  line-height: calc(var(--spacing) * 5);
+}
+
+.sysviz-container .leading-none {
+  line-height: 1;
+}
+
+.sysviz-container .leading-relaxed {
+  line-height: var(--leading-relaxed);
+}
+
+.sysviz-container .font-medium {
+  font-weight: var(--font-weight-medium);
+}
+
+.sysviz-container .font-semibold {
+  font-weight: var(--font-weight-semibold);
+}
+
+.sysviz-container .font-bold {
+  font-weight: var(--font-weight-bold);
+}
+
+/* Contrail also has global utility-looking classes such as `.grid`.
+   Re-scope the layout utilities SysViz uses so host panel layout rules
+   cannot turn small controls into terminal-sized grids. */
+.sysviz-container .grid {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: none;
+  grid-auto-rows: auto;
+  align-content: normal;
+  align-items: normal;
+  gap: normal;
+  overflow: visible;
+  padding: 0;
+}
+
+.sysviz-container .grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 48rem) {
+  .sysviz-container .md\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sysviz-container .flex {
+  display: flex;
+}
+
+.sysviz-container .inline-flex {
+  display: inline-flex;
+}
+
+.sysviz-container .items-center {
+  align-items: center;
+}
+
+.sysviz-container .items-end {
+  align-items: flex-end;
+}
+
+.sysviz-container .justify-between {
+  justify-content: space-between;
+}
+
+.sysviz-container .justify-center {
+  justify-content: center;
+}
+
+.sysviz-container .justify-end {
+  justify-content: flex-end;
+}
+
+.sysviz-container .justify-start {
+  justify-content: flex-start;
+}
+
+.sysviz-container .gap-1 {
+  gap: calc(var(--spacing) * 1);
+}
+
+.sysviz-container .gap-1\.5 {
+  gap: calc(var(--spacing) * 1.5);
+}
+
+.sysviz-container .gap-2 {
+  gap: calc(var(--spacing) * 2);
+}
+
+.sysviz-container .gap-6 {
+  gap: calc(var(--spacing) * 6);
 }
 
 /* P1: fixed → absolute (keep inside container) */
@@ -55,7 +204,7 @@
 /* Glassmorphism */
 .glass-panel {
   border: 1px solid rgba(255, 255, 255, 0.75);
-  border-radius: 20px;
+  border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.48) 100%),
     rgba(248, 250, 252, 0.38);
@@ -71,6 +220,24 @@
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+}
+
+.ui-focus-ring {
+  outline: none;
+}
+
+.ui-focus-ring:focus-visible {
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.42);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Scrollbar */
