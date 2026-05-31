@@ -19,21 +19,17 @@
 
 ## 構成
 
-```text
-public/data/           → 内蔵サンプル Mermaid 図（Flask / FastAPI）
-src/
-  components/          → React UI（Canvas3D / ChatPanel / ProjectSelector / DiagramSwitcher）
-  hooks/               → useChat / useGitLab / useVisualizationController
-  lib/
-    three/             → Three.js レンダリングエンジン
-      parser/          → Mermaid パーサー（.mmd → 中間表現）
-      rendering/       → ClusterRenderer / ConnectionLines / ParticleTraffic / SubgraphRenderer 等
-    views/             → ViewConfig 生成・プロジェクトレジストリ
-    llm/               → LLM サービス・コンテキストビルダー・ラベル翻訳
-    gitlab/            → GitLab API 連携
-  types/               → 可視化型定義
-ci/                    → Python 製リポジトリ解析・Mermaid 生成スクリプト
-```
+- `public/data/` — 内蔵サンプル Mermaid 図（Flask / FastAPI）
+- `src/components/` — React UI（Canvas3D / ChatPanel / ProjectSelector / DiagramSwitcher）
+- `src/hooks/` — useChat / useGitLab / useVisualizationController
+- `src/lib/three/` — Three.js レンダリングエンジン
+  - `parser/` — Mermaid パーサー（.mmd → 中間表現）
+  - `rendering/` — ClusterRenderer / ConnectionLines / ParticleTraffic / SubgraphRenderer 等
+- `src/lib/views/` — ViewConfig 生成・プロジェクトレジストリ
+- `src/lib/llm/` — LLM サービス・コンテキストビルダー・ラベル翻訳
+- `src/lib/gitlab/` — GitLab API 連携
+- `src/types/` — 可視化型定義
+- `ci/` — Python 製リポジトリ解析・Mermaid 生成スクリプト
 
 ### 技術スタック
 
